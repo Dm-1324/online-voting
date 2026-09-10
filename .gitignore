@@ -6,4 +6,5 @@ target/
 .env
 .env.*
 !.env.example
+src/main/resources/application-local.properties
 .DS_Store
