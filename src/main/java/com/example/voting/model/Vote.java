@@ -3,7 +3,7 @@ package com.example.voting.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"poll_id", "voter_name"}))
+@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"poll_id", "voter_id"}))
 public class Vote {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -12,7 +12,10 @@ public class Vote {
     @Column(name = "poll_id", nullable = false)
     private Long pollId;
 
-    @Column(name = "voter_name", nullable = false)
+    @Column(name = "voter_id", nullable = false, length = 64)
+    private String voterId;
+
+    @Column(name = "voter_name", nullable = false, length = 80)
     private String voterName;
 
     @Column(name = "option_id", nullable = false)
@@ -20,7 +23,11 @@ public class Vote {
 
     public Vote() {}
     public Vote(Long pollId, String voterName, Long optionId) {
+        this(pollId, voterName, voterName, optionId);
+    }
+    public Vote(Long pollId, String voterId, String voterName, Long optionId) {
         this.pollId = pollId;
+        this.voterId = voterId;
         this.voterName = voterName;
         this.optionId = optionId;
     }
@@ -28,6 +35,8 @@ public class Vote {
     public Long getId() { return id; }
     public Long getPollId() { return pollId; }
     public void setPollId(Long pollId) { this.pollId = pollId; }
+    public String getVoterId() { return voterId; }
+    public void setVoterId(String voterId) { this.voterId = voterId; }
     public String getVoterName() { return voterName; }
     public void setVoterName(String voterName) { this.voterName = voterName; }
     public Long getOptionId() { return optionId; }
