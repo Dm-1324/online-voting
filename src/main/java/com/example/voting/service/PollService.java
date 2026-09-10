@@ -10,6 +10,7 @@ import com.example.voting.repository.PollRepository;
 import com.example.voting.repository.VoteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
@@ -38,6 +39,7 @@ public class PollService {
         return pollRepository.save(poll);
     }
 
+    @Transactional
     public Poll vote(Long pollId, String voterName, Long optionId) {
         Poll poll = getById(pollId);
         if (!poll.isOpen()) throw new PollClosedException("This poll is closed");
