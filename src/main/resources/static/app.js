@@ -51,8 +51,13 @@ function renderPoll(poll) {
   const optionsHtml = poll.options.map(option => {
     const votes = Number(option.voteCount || 0);
     const pct = total ? Math.round((votes / total) * 100) : 0;
+    const voterNames = Array.isArray(option.voterNames) ? option.voterNames : [];
+    const voterText = voterNames.length ? voterNames.join(', ') : 'No voters yet';
+    const voterList = voterNames.length
+      ? voterNames.map(name => `<li>${escapeHtml(name)}</li>`).join('')
+      : '<li>No voters yet</li>';
     return `<div class="option-row">
-      <div class="option-line"><span>${escapeHtml(option.text)}</span><span class="option-count">${votes} · ${pct}%</span></div>
+      <div class="option-line"><span>${escapeHtml(option.text)}</span><span class="option-count voter-details" tabindex="0" aria-label="${escapeHtml(voterText)}">${votes} · ${pct}%<span class="voter-tooltip" role="tooltip"><strong>Voters</strong><ul>${voterList}</ul></span></span></div>
       <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
       ${poll.open ? `<button class="vote-btn" data-action="vote" data-poll="${poll.id}" data-option="${option.id}" type="button">Vote for this</button>` : ''}
     </div>`;
@@ -71,7 +76,7 @@ function renderPoll(poll) {
     ${poll.open ? `<div class="voter-field"><label for="voter-${poll.id}">Your name</label><input class="voter-input" id="voter-${poll.id}" maxlength="80" autocomplete="name" placeholder="Enter your name to vote" value="${escapeHtml(voterName)}"></div>` : ''}
     <div class="options">${optionsHtml}</div>
     <div class="poll-footer">
-      <span class="total-votes">${poll.open ? 'Results update automatically' : 'Results locked'}</span>
+      <span class="total-votes">${poll.open ? 'Results update automatically · Hover a result to see voters' : 'Results locked · Hover a result to see voters'}</span>
       ${isOwner && poll.open ? `<button class="close-btn" data-action="close" data-poll="${poll.id}" type="button">Close poll</button>` : ''}
     </div>
     <div class="error" id="error-${poll.id}" role="alert"></div>
