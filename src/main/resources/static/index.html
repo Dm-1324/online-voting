@@ -1,76 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b1220">
-  <meta name="description" content="VoteFlow — create and share live polls.">
-  <title>VoteFlow — Live Voting</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1220">
+<title>VoteFlow — Live Voting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <a id="homeLink" class="brand" href="#" aria-label="VoteFlow home">
-        <span class="brand-mark">✓</span><span>VoteFlow</span>
-      </a>
-      <div class="live-indicator"><span></span> Live voting</div>
-    </header>
-
-    <main>
-      <section class="hero">
-        <div>
-          <p class="eyebrow">SIMPLE · FAST · LIVE</p>
-          <h1>Make every vote<br><span>count.</span></h1>
-          <p class="hero-copy">Create a poll, share one simple link, and watch the community results update automatically.</p>
-          <div class="hero-pills"><span>✓ Shareable links</span><span>✓ One vote per device</span><span>✓ Live results</span></div>
-        </div>
-        <div class="hero-card" aria-hidden="true">
-          <div class="hero-card-top"><span>LIVE POLL</span><span class="pulse-dot"></span></div>
-          <div class="mini-question">What should we choose?</div>
-          <div class="mini-bar"><i style="width:72%"></i></div>
-          <div class="mini-bar short"><i style="width:38%"></i></div>
-          <div class="hero-number">72<span>%</span></div>
-        </div>
-      </section>
-
-      <section id="createSection" class="create-card">
-        <div class="section-heading">
-          <div class="icon-box">＋</div>
-          <div><h2>Create a new poll</h2><p>Ask a question and add at least two choices.</p></div>
-        </div>
-        <form id="createForm" novalidate>
-          <div class="field field-wide">
-            <label for="question">Question</label>
-            <input id="question" autocomplete="off" maxlength="200" placeholder="What should we have for lunch?" required>
-          </div>
-          <div class="option-fields">
-            <div class="field"><label for="opt1">Option 1</label><input id="opt1" autocomplete="off" maxlength="100" placeholder="Pizza" required></div>
-            <div class="field"><label for="opt2">Option 2</label><input id="opt2" autocomplete="off" maxlength="100" placeholder="Burgers" required></div>
-          </div>
-          <div class="form-footer"><span id="createError" class="form-error" role="alert"></span><button class="primary-btn" id="createBtn" type="submit"><span class="btn-label">Create poll</span><span>→</span></button></div>
-        </form>
-      </section>
-
-      <section class="poll-section">
-        <div class="section-title-row">
-          <div><p id="pollEyebrow" class="eyebrow">COMMUNITY VOTES</p><h2 id="pollHeading">Active polls</h2></div>
-          <button class="refresh-btn" id="refreshBtn" type="button" title="Refresh polls">↻ <span>Refresh</span></button>
-        </div>
-        <div id="status" class="status" aria-live="polite"></div>
-        <div id="polls" class="poll-grid" aria-live="polite"></div>
-        <div id="emptyState" class="empty-state" hidden>
-          <div class="empty-icon">◌</div><h3>No polls yet</h3><p>Create the first poll above and start collecting votes.</p>
-        </div>
-      </section>
-    </main>
-
-    <footer><span>VoteFlow</span><span>Built for fast, transparent polling.</span></footer>
-  </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script>
-</body>
-</html>
+<div class="app-shell">
+<header class="topbar"><a id="homeLink" class="brand" href="#" aria-label="VoteFlow home"><span class="brand-mark">✓</span><span>VoteFlow</span></a><div class="live-indicator"><span></span> Live voting</div></header>
+<main>
+<section class="hero"><div><p class="eyebrow">SIMPLE · FAST · LIVE</p><h1>Make every vote<br><span>count.</span></h1><p class="hero-copy">Create a poll, share one simple link, and watch the community results update automatically.</p><div class="hero-pills"><span>✓ Shareable links</span><span>✓ One vote per device</span><span>✓ Live results</span></div></div><div class="hero-card" aria-hidden="true"><div class="hero-card-top"><span>LIVE POLL</span><span class="pulse-dot"></span></div><div class="mini-question">What should we choose?</div><div class="mini-bar"><i style="width:72%"></i></div><div class="mini-bar short"><i style="width:38%"></i></div><div class="hero-number">72<span>%</span></div></div></section>
+<section id="createSection" class="create-card"><div class="section-heading"><div class="icon-box">＋</div><div><h2>Create a new poll</h2><p>Ask a question and add at least two choices.</p></div></div><form id="createForm" novalidate><div class="field field-wide"><label for="question">Question</label><input id="question" autocomplete="off" maxlength="200" placeholder="What should we have for lunch?" required></div><div class="option-fields"><div class="field"><label for="opt1">Option 1</label><input id="opt1" autocomplete="off" maxlength="100" placeholder="Pizza" required></div><div class="field"><label for="opt2">Option 2</label><input id="opt2" autocomplete="off" maxlength="100" placeholder="Burgers" required></div></div><div class="form-footer"><span id="createError" class="form-error" role="alert"></span><button class="primary-btn" id="createBtn" type="submit"><span class="btn-label">Create poll</span><span>→</span></button></div></form></section>
+<section class="poll-section"><div class="section-title-row"><div><p id="pollEyebrow" class="eyebrow">COMMUNITY VOTES</p><h2 id="pollHeading">Active polls</h2></div><button class="refresh-btn" id="refreshBtn" type="button" title="Refresh polls">↻ <span>Refresh</span></button></div><div id="status" class="status" aria-live="polite"></div><div id="polls" class="poll-grid" aria-live="polite"></div><div id="emptyState" class="empty-state" hidden><div class="empty-icon">◌</div><h3>No polls yet</h3><p>Create the first poll above and start collecting votes.</p></div></section>
+</main><footer><span>VoteFlow</span><span>Built for fast, transparent polling.</span></footer>
+</div><div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body></html>
