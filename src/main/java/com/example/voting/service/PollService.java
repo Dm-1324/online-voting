@@ -31,15 +31,16 @@ public class PollService {
     @Autowired private PollOptionRepository optionRepository;
     @Autowired private VoteRepository voteRepository;
 
-    public List<Poll> getAll() { return pollRepository.findAll(); }
+    public List<Poll> getAll() { return pollRepository.findAllWithOptions(); }
 
     public Poll getById(Long id) {
-        return pollRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+        return pollRepository.findWithOptionsById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
     }
 
     public Poll getByShareCode(String shareCode) {
         if (shareCode == null || shareCode.isBlank()) throw new IllegalArgumentException("Poll link is invalid");
-        return pollRepository.findByShareCode(shareCode.trim().toUpperCase())
+        return pollRepository.findWithOptionsByShareCode(shareCode.trim().toUpperCase())
                 .orElseThrow(() -> new IllegalArgumentException("Poll not found"));
     }
 
@@ -105,7 +106,6 @@ public class PollService {
         return pollRepository.save(poll);
     }
 
-    // Internal/service-test helper. Public HTTP traffic always uses the token-protected overload.
     public Poll closePoll(Long id) {
         Poll poll = getById(id);
         poll.setOpen(false);
