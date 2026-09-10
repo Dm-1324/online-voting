@@ -90,9 +90,9 @@ docker compose down -v
 
 ## Neon PostgreSQL — recommended low-cost production database
 
-Neon provides managed PostgreSQL and currently has a Free plan. Neon documents a Free plan with 10 projects, 0.5 GB storage per project, 50 CU-hours/month per project, 5 GB egress/month, and scale-to-zero behavior. Limits can change, so check the current Neon pricing page before relying on a free tier for sustained public traffic. citeturn0search0
+Neon provides managed PostgreSQL and currently has a Free plan. Neon documents a Free plan with 10 projects, 0.5 GB storage per project, 50 CU-hours/month per project, 5 GB egress/month, and scale-to-zero behavior. Limits can change, so check the current Neon pricing page before relying on a free tier for sustained public traffic.
 
-Neon works with Java/JDBC. Neon requires encrypted connections and provides the database connection string from the project's **Connect** dialog. citeturn0search8turn0search12
+Neon works with Java/JDBC and requires encrypted connections. The database connection string is available from the project's **Connect** dialog.
 
 ### Create the Neon database
 
@@ -118,7 +118,7 @@ DB_MAX_POOL_SIZE=5
 DB_MIN_IDLE=0
 ```
 
-Spring Boot supports environment variables and externalized configuration, so these values do not need to be committed to Git. citeturn1search2
+Spring Boot supports environment variables and externalized configuration, so these values do not need to be committed to Git.
 
 For this project, **EC2 + Neon** is a good fit:
 
@@ -253,7 +253,7 @@ docker run --rm -p 8092:8092 \
 
 ## Why the poll page previously returned HTTP 500
 
-The application intentionally sets `spring.jpa.open-in-view=false`. Spring Boot documents that Open EntityManager in View is what normally keeps a Hibernate session available to lazy-load associations during web response rendering. citeturn2search0
+The application intentionally sets `spring.jpa.open-in-view=false`. Spring Boot documents that Open EntityManager in View is what normally keeps a Hibernate session available to lazy-load associations during web response rendering.
 
 `Poll.options` is a lazy JPA collection. The API was returning a `Poll` and Jackson was trying to serialize `options` after the repository session had already closed. That can produce a `LazyInitializationException` and the browser then displayed **Internal Server Error**.
 
