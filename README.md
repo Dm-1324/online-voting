@@ -30,6 +30,7 @@ The app also supports H2 automatically for simple local development.
 - One vote per voter ID per poll, backed by a database unique constraint
 - Creator-only poll closing using a private admin token
 - Automatic result refresh every 5 seconds
+- **Hover over an option's vote count/percentage to see the names of voters who selected that option**
 - Server-side validation and global error handling
 - Transactional vote recording
 - PostgreSQL-ready configuration
@@ -290,9 +291,7 @@ cd /opt/online-voting
 git pull
 
 docker build -t online-voting .
-
 docker rm -f voteflow-app || true
-
 docker run -d \
   --name voteflow-app \
   --restart unless-stopped \
@@ -379,9 +378,11 @@ one poll + one voter ID = one vote
 
 The display name is stored with the vote for the poll record, but it is not the identity used for uniqueness.
 
-### 4. Live results
+### 4. Live results and voter details
 
 The browser refreshes the poll every five seconds. Multiple people can therefore see results change while the poll is active.
+
+Each option's vote count and percentage is interactive. **Hover over the count/percentage to open a small voter list showing the display names of everyone who selected that option.** The voter names are loaded from the vote records and are not used as the uniqueness key.
 
 ### 5. Close the poll
 
@@ -510,6 +511,7 @@ Before Jenkins deployment:
 - [x] Environment-based database configuration
 - [x] Responsive professional UI
 - [x] Live result refresh without destroying the voter input
+- [x] Voter names displayed interactively for each option's results
 - [ ] HTTPS/domain/reverse proxy
 - [ ] Production rate limiting/WAF
 - [ ] Verified voter identity (OTP/auth) if stronger voting integrity is required
