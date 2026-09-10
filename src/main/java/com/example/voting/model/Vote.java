@@ -3,14 +3,19 @@ package com.example.voting.model;
 import jakarta.persistence.*;
 
 @Entity
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"pollId", "voterName"}))
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"poll_id", "voter_name"}))
 public class Vote {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "poll_id", nullable = false)
     private Long pollId;
+
+    @Column(name = "voter_name", nullable = false)
     private String voterName;
+
+    @Column(name = "option_id", nullable = false)
     private Long optionId;
 
     public Vote() {}
