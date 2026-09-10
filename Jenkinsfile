@@ -5,12 +5,9 @@ pipeline {
         timestamps()
         disableConcurrentBuilds()
         timeout(time: 30, unit: 'MINUTES')
-        skipDefaultCheckout(false)
     }
 
-    triggers {
-        githubPush()
-    }
+    triggers { githubPush() }
 
     environment {
         AWS_REGION = 'ap-south-1'
@@ -26,15 +23,10 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
-
         stage('Build & Test') {
-            steps {
-                sh 'mvn -B clean verify'
-            }
+            steps { sh 'mvn -B clean verify' }
             post {
                 always {
                     junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
@@ -42,7 +34,6 @@ pipeline {
                 }
             }
         }
-
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
@@ -50,21 +41,14 @@ pipeline {
                 }
             }
         }
-
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                timeout(time: 10, unit: 'MINUTES') { waitForQualityGate abortPipeline: true }
             }
         }
-
         stage('Docker Build') {
-            steps {
-                sh 'docker build -t "$IMAGE_URI:$BUILD_NUMBER" -t "$IMAGE_URI:latest" .'
-            }
+            steps { sh 'docker build -t "$IMAGE_URI:$BUILD_NUMBER" -t "$IMAGE_URI:latest" .' }
         }
-
         stage('Push to Amazon ECR') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'aws-ecr', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
@@ -78,39 +62,29 @@ pipeline {
                 }
             }
         }
-
         stage('Deploy to EC2') {
             steps {
                 sshagent(credentials: ['ec2-deploy-key']) {
                     sh '''
                         set +x
-                        ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" \
-                          "aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com && \
-                           docker pull $IMAGE_URI:$BUILD_NUMBER && \
-                           docker rm -f voteflow-app || true; \
-                           docker run -d --name voteflow-app --restart unless-stopped --env-file /opt/voteflow/.env -p 8092:8092 $IMAGE_URI:$BUILD_NUMBER"
+                        ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "set -e
+                          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                          docker pull $IMAGE_URI:$BUILD_NUMBER
+                          docker rm -f voteflow-app || true
+                          docker run -d --name voteflow-app --restart unless-stopped --env-file /opt/voteflow/.env -p 8092:8092 $IMAGE_URI:$BUILD_NUMBER
+                        "
                     '''
                 }
             }
         }
-
         stage('Smoke Test') {
-            steps {
-                sh '''
-                    sleep 15
-                    curl --fail --silent --show-error "$APP_URL/actuator/health"
-                '''
-            }
+            steps { sh 'sleep 15 && curl --fail --silent --show-error "$APP_URL/actuator/health"' }
         }
     }
 
     post {
-        success {
-            echo "Deployment successful: ${env.BUILD_NUMBER}"
-        }
-        failure {
-            echo "Pipeline failed. Check the stage logs above."
-        }
+        success { echo "Deployment successful: ${env.BUILD_NUMBER}" }
+        failure { echo 'Pipeline failed. Check the stage logs above.' }
         always {
             sh 'docker image prune -f || true'
             cleanWs()
