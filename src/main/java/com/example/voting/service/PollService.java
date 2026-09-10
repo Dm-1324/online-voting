@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -33,8 +34,7 @@ public class PollService {
     public List<Poll> getAll() { return pollRepository.findAll(); }
 
     public Poll getById(Long id) {
-        return pollRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+        return pollRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
     }
 
     public Poll getByShareCode(String shareCode) {
@@ -50,17 +50,14 @@ public class PollService {
         poll.setShareCode(generateShareCode());
         String adminToken = UUID.randomUUID().toString().replace("-", "");
         poll.setAdminTokenHash(sha256(adminToken));
-
         for (String text : optionTexts) {
             PollOption option = new PollOption(text.trim());
             option.setPoll(poll);
             poll.getOptions().add(option);
         }
-        Poll saved = pollRepository.save(poll);
-        return new PollCreation(saved, adminToken);
+        return new PollCreation(pollRepository.save(poll), adminToken);
     }
 
-    // Kept for service compatibility and unit tests.
     public Poll createPoll(String question, List<String> optionTexts) {
         return createPollWithAdminToken(question, optionTexts).poll();
     }
@@ -75,7 +72,7 @@ public class PollService {
     public Poll vote(Long pollId, String voterName, String voterId, Long optionId) {
         Poll poll = getById(pollId);
         if (!poll.isOpen()) throw new PollClosedException("This poll is closed");
-        if (poll.getExpiresAt() != null && poll.getExpiresAt().isBefore(java.time.Instant.now())) {
+        if (poll.getExpiresAt() != null && poll.getExpiresAt().isBefore(Instant.now())) {
             poll.setOpen(false);
             pollRepository.save(poll);
             throw new PollClosedException("This poll has expired");
@@ -83,22 +80,18 @@ public class PollService {
         if (voterName == null || voterName.isBlank()) throw new IllegalArgumentException("Voter name is required");
         if (voterId == null || voterId.isBlank() || voterId.length() > 64) throw new IllegalArgumentException("Voter identity is invalid");
         if (optionId == null) throw new IllegalArgumentException("An option is required");
-
         if (voteRepository.findByPollIdAndVoterId(pollId, voterId).isPresent()) {
             throw new AlreadyVotedException("You have already voted on this poll");
         }
 
         PollOption option = poll.getOptions().stream()
                 .filter(o -> o.getId() != null && o.getId().equals(optionId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Invalid option for this poll"));
-
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("Invalid option for this poll"));
         option.setVoteCount(option.getVoteCount() + 1);
         optionRepository.save(option);
         try {
             voteRepository.saveAndFlush(new Vote(pollId, voterId, voterName.trim(), optionId));
         } catch (DataIntegrityViolationException ex) {
-            // Protects against two simultaneous requests from the same voter.
             throw new AlreadyVotedException("You have already voted on this poll");
         }
         return poll;
@@ -112,8 +105,11 @@ public class PollService {
         return pollRepository.save(poll);
     }
 
+    // Internal/service-test helper. Public HTTP traffic always uses the token-protected overload.
     public Poll closePoll(Long id) {
-        return closePoll(id, null);
+        Poll poll = getById(id);
+        poll.setOpen(false);
+        return pollRepository.save(poll);
     }
 
     private void requireAdmin(Poll poll, String adminToken) {
@@ -126,9 +122,7 @@ public class PollService {
     private void validatePoll(String question, List<String> optionTexts) {
         if (question == null || question.isBlank()) throw new IllegalArgumentException("Question is required");
         if (question.trim().length() > 200) throw new IllegalArgumentException("Question must be 200 characters or fewer");
-        if (optionTexts == null || optionTexts.size() < 2 || optionTexts.size() > 10) {
-            throw new IllegalArgumentException("A poll needs between 2 and 10 options");
-        }
+        if (optionTexts == null || optionTexts.size() < 2 || optionTexts.size() > 10) throw new IllegalArgumentException("A poll needs between 2 and 10 options");
         for (String text : optionTexts) {
             if (text == null || text.isBlank()) throw new IllegalArgumentException("Option text is required");
             if (text.trim().length() > 100) throw new IllegalArgumentException("Options must be 100 characters or fewer");
@@ -148,11 +142,8 @@ public class PollService {
     private String sha256(String value) {
         if (value == null) return "";
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) { throw new IllegalStateException("SHA-256 is unavailable", e); }
     }
 
     public record PollCreation(Poll poll, String adminToken) {}
