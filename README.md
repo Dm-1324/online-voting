@@ -37,19 +37,35 @@ The app also supports H2 automatically for simple local development.
 - Small Hikari connection pool suitable for a free/small database plan
 - Actuator health endpoint for deployment checks: `/actuator/health`
 - Maven tests + JaCoCo coverage
-- Docker and Docker Compose support
+- Dockerfile-based deployment
 
 ## Requirements
 
 - Java 17+
 - Maven 3.9+
-- Docker Desktop (recommended for PostgreSQL testing)
+- Docker Desktop (recommended for Docker testing)
+- A PostgreSQL database such as Neon for production-style deployment
 
-## Option 1 — Run with Maven + H2
+# Fork and Run Your Own Copy
+
+## 1. Fork the repository
+
+Open the GitHub repository and click **Fork** to create your own copy under your GitHub account.
+
+Then clone your fork:
 
 ```bash
-git clone https://github.com/Dm-1324/online-voting.git
+git clone https://github.com/YOUR-GITHUB-USERNAME/online-voting.git
 cd online-voting
+```
+
+Replace `YOUR-GITHUB-USERNAME` with your GitHub username.
+
+## 2. Run locally with H2
+
+H2 is the easiest option for local development and requires no database setup.
+
+```bash
 mvn clean verify
 mvn spring-boot:run
 ```
@@ -60,14 +76,47 @@ Open:
 http://localhost:8092/
 ```
 
-H2 is the local default. Its data is not suitable for production.
+The H2 database is in memory, so data is lost when the application stops.
 
-## Option 2 — Run the full stack with PostgreSQL
+## 3. Run locally with Neon PostgreSQL
 
-This is the recommended way to test the production-style database setup locally.
+For testing the same database style used in deployment, create a Neon PostgreSQL database and configure it locally.
+
+Create:
+
+```text
+src/main/resources/application-local.properties
+```
+
+Do **not** commit this file. It is already included in `.gitignore`.
+
+Add:
+
+```properties
+spring.datasource.url=jdbc:postgresql://YOUR-NEON-HOST/YOUR-DATABASE?sslmode=require&channelBinding=require
+spring.datasource.username=YOUR-NEON-USERNAME
+spring.datasource.password=YOUR-NEON-PASSWORD
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.open-in-view=false
+spring.datasource.hikari.maximum-pool-size=5
+spring.datasource.hikari.minimum-idle=0
+spring.datasource.hikari.connection-timeout=10000
+spring.datasource.hikari.validation-timeout=5000
+```
+
+Run the application with the local profile.
+
+### Windows PowerShell
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="local"
+mvn spring-boot:run
+```
+
+### Linux/macOS
 
 ```bash
-docker compose up --build
+SPRING_PROFILES_ACTIVE=local mvn spring-boot:run
 ```
 
 Open:
@@ -76,51 +125,206 @@ Open:
 http://localhost:8092/
 ```
 
-Stop it with:
+## 4. Run with Docker locally
+
+Build the Docker image:
 
 ```bash
-docker compose down
+docker build -t online-voting .
 ```
 
-To also remove the local PostgreSQL volume/data:
+Run it using an external PostgreSQL database such as Neon:
 
 ```bash
-docker compose down -v
+docker run --rm -p 8092:8092 \
+  -e DATABASE_URL="jdbc:postgresql://YOUR-NEON-HOST/YOUR-DATABASE?sslmode=require&channelBinding=require" \
+  -e DATABASE_USERNAME="YOUR-NEON-USERNAME" \
+  -e DATABASE_PASSWORD="YOUR-NEON-PASSWORD" \
+  -e PORT=8092 \
+  -e DDL_AUTO=update \
+  online-voting
 ```
 
-## Neon PostgreSQL — recommended low-cost production database
+Open:
 
-Neon provides managed PostgreSQL and currently has a Free plan. Neon documents a Free plan with 10 projects, 0.5 GB storage per project, 50 CU-hours/month per project, 5 GB egress/month, and scale-to-zero behavior. Limits can change, so check the current Neon pricing page before relying on a free tier for sustained public traffic.
+```text
+http://localhost:8092/
+```
 
-Neon works with Java/JDBC and requires encrypted connections. The database connection string is available from the project's **Connect** dialog.
+# Deploy to AWS EC2 with Docker + Neon
+
+This project can be deployed directly to an EC2 instance using the Dockerfile. Docker Compose is not required.
+
+The deployment architecture is:
+
+```text
+GitHub
+   │
+   ▼
+AWS EC2
+Docker container
+   │
+   ▼
+Neon PostgreSQL
+   │
+   ▼
+Public users
+```
+
+## 1. Prepare an EC2 instance
+
+Use an EC2 instance with Docker installed and a security group that allows SSH access. For the initial test deployment, allow TCP port `8092` from your required source so the application can be reached at:
+
+```text
+http://YOUR-EC2-PUBLIC-IP:8092/
+```
+
+For a real public deployment, HTTPS through a reverse proxy/load balancer is recommended instead of exposing port 8092 directly.
+
+## 2. SSH into EC2
+
+Example:
+
+```bash
+ssh -i YOUR-KEY.pem ec2-user@YOUR-EC2-PUBLIC-IP
+```
+
+If your EC2 image uses another username, such as `ubuntu`, use that username instead.
+
+## 3. Create the production environment file
+
+Create a directory for the application configuration:
+
+```bash
+sudo mkdir -p /opt/voteflow
+sudo nano /opt/voteflow/.env
+```
+
+Add:
+
+```env
+DATABASE_URL=jdbc:postgresql://YOUR-NEON-HOST/YOUR-DATABASE?sslmode=require&channelBinding=require
+DATABASE_USERNAME=YOUR-NEON-USERNAME
+DATABASE_PASSWORD=YOUR-NEON-PASSWORD
+PORT=8092
+DDL_AUTO=update
+DB_MAX_POOL_SIZE=5
+DB_MIN_IDLE=0
+DB_CONNECTION_TIMEOUT_MS=10000
+DB_VALIDATION_TIMEOUT_MS=5000
+```
+
+Replace the `YOUR-...` values with the connection details from your Neon project.
+
+Secure the file:
+
+```bash
+sudo chmod 600 /opt/voteflow/.env
+```
+
+**Never commit this file, the Neon password, AWS credentials, or an EC2 private key to GitHub.**
+
+## 4. Clone the fork on EC2
+
+```bash
+cd /opt
+git clone https://github.com/YOUR-GITHUB-USERNAME/online-voting.git
+cd /opt/online-voting
+```
+
+## 5. Build the Docker image
+
+```bash
+docker build -t online-voting .
+```
+
+The Dockerfile builds the Spring Boot application with Java 17 and packages it into a lightweight runtime image.
+
+## 6. Run the application
+
+```bash
+docker run -d \
+  --name voteflow-app \
+  --restart unless-stopped \
+  -p 8092:8092 \
+  --env-file /opt/voteflow/.env \
+  online-voting
+```
+
+Check that the container is running:
+
+```bash
+docker ps
+```
+
+View application logs:
+
+```bash
+docker logs -f voteflow-app
+```
+
+Check the health endpoint from EC2:
+
+```bash
+curl http://localhost:8092/actuator/health
+```
+
+A healthy application should return a response containing:
+
+```json
+{"status":"UP"}
+```
+
+Then open from your browser:
+
+```text
+http://YOUR-EC2-PUBLIC-IP:8092/
+```
+
+## 7. Updating the application on EC2
+
+After pushing changes to your fork:
+
+```bash
+cd /opt/online-voting
+git pull
+
+docker build -t online-voting .
+
+docker rm -f voteflow-app || true
+
+docker run -d \
+  --name voteflow-app \
+  --restart unless-stopped \
+  -p 8092:8092 \
+  --env-file /opt/voteflow/.env \
+  online-voting
+```
+
+Your Neon database remains separate from the application container, so rebuilding/replacing the container does not remove the database data.
+
+## 8. Optional: stable public URL
+
+An EC2 public IP can change if the instance is stopped and started. For a stable URL, use an Elastic IP or a domain name. For production use, put HTTPS in front of the application using a reverse proxy or AWS load balancer.
+
+# Neon PostgreSQL
+
+Neon provides managed PostgreSQL. The application uses a JDBC PostgreSQL connection and encrypted connections.
 
 ### Create the Neon database
 
 1. Create a Neon project.
-2. Use a stable PostgreSQL release such as PostgreSQL 17 for this application.
-3. Open **Connect** in the Neon dashboard.
-4. Copy the PostgreSQL connection details.
-5. Convert the connection string to the JDBC form used by Spring Boot:
+2. Open **Connect** in the Neon dashboard.
+3. Copy the PostgreSQL connection details.
+4. Use the JDBC form required by Spring Boot:
 
 ```text
 jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require&channelBinding=require
 ```
 
-6. Set these variables on the EC2 host or through your deployment secret mechanism:
+5. Keep the database credentials outside Git.
 
-```text
-DATABASE_URL=jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require&channelBinding=require
-DATABASE_USERNAME=YOUR_NEON_USERNAME
-DATABASE_PASSWORD=YOUR_NEON_PASSWORD
-DDL_AUTO=update
-PORT=8092
-DB_MAX_POOL_SIZE=5
-DB_MIN_IDLE=0
-```
-
-Spring Boot supports environment variables and externalized configuration, so these values do not need to be committed to Git.
-
-For this project, **EC2 + Neon** is a good fit:
+For this project, EC2 + Neon is a good fit:
 
 ```text
 Public users
@@ -135,7 +339,7 @@ Neon PostgreSQL
 
 Neon should be treated as the persistent source of truth for polls and votes; do not put database credentials in the Docker image or Git repository.
 
-## How public voting works
+# How Public Voting Works
 
 ### 1. Create a poll
 
@@ -150,7 +354,7 @@ The server generates:
 The creator receives a link similar to:
 
 ```text
-http://YOUR_EC2_PUBLIC_IP:8092/p/7XK92A
+http://YOUR-EC2-PUBLIC-IP:8092/p/7XK92A
 ```
 
 or, after adding a domain and HTTPS:
@@ -179,15 +383,13 @@ The display name is stored with the vote for the poll record, but it is not the 
 
 The browser refreshes the poll every five seconds. Multiple people can therefore see results change while the poll is active.
 
-For a future high-scale version, replace polling with WebSockets/SSE and move rate limiting/session state to shared infrastructure.
-
 ### 5. Close the poll
 
 The creator's private admin token is stored locally on the creator's browser after poll creation. Only a request containing the matching `X-Poll-Admin-Token` can close the poll.
 
 Do not expose or commit this token.
 
-## API
+# API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -233,7 +435,9 @@ Header:
 X-Poll-Admin-Token: <creator-token>
 ```
 
-## Docker
+# Docker
+
+The repository uses a **Dockerfile** for container builds. Docker Compose is not required.
 
 Build:
 
@@ -241,25 +445,55 @@ Build:
 docker build -t online-voting .
 ```
 
-Run against Neon or another externally configured PostgreSQL database:
+Run with environment variables:
 
 ```bash
 docker run --rm -p 8092:8092 \
-  -e DATABASE_URL="jdbc:postgresql://HOST/DBNAME?sslmode=require&channelBinding=require" \
-  -e DATABASE_USERNAME="voting" \
-  -e DATABASE_PASSWORD="CHANGE_ME" \
+  --env-file /opt/voteflow/.env \
   online-voting
 ```
 
-## Why the poll page previously returned HTTP 500
+# Troubleshooting
 
-The application intentionally sets `spring.jpa.open-in-view=false`. Spring Boot documents that Open EntityManager in View is what normally keeps a Hibernate session available to lazy-load associations during web response rendering.
+## Poll page returns HTTP 500
 
-`Poll.options` is a lazy JPA collection. The API was returning a `Poll` and Jackson was trying to serialize `options` after the repository session had already closed. That can produce a `LazyInitializationException` and the browser then displayed **Internal Server Error**.
+The application intentionally sets `spring.jpa.open-in-view=false`. `Poll.options` is a lazy JPA collection, so API reads use fetch-join queries to load the options before the entity leaves the data-access layer. This avoids relying on a long-lived Hibernate session during HTTP response rendering.
 
-The repository now uses fetch-join queries for poll reads so `Poll.options` is loaded before the entity leaves the data-access layer. This keeps `open-in-view=false` and avoids relying on a long-lived Hibernate session during HTTP response rendering.
+## EC2 container is running but the browser cannot connect
 
-## Pre-CI/CD production checklist
+Check:
+
+1. The container is running:
+
+```bash
+docker ps
+```
+
+2. The application is healthy:
+
+```bash
+curl http://localhost:8092/actuator/health
+```
+
+3. EC2 security group allows TCP `8092` for the initial deployment.
+4. You are using the correct EC2 public IP.
+5. Check application logs:
+
+```bash
+docker logs voteflow-app
+```
+
+## Database connection fails
+
+Verify the values in `/opt/voteflow/.env`, especially:
+
+- `DATABASE_URL`
+- `DATABASE_USERNAME`
+- `DATABASE_PASSWORD`
+
+The Neon URL should use the JDBC format and SSL parameters shown above.
+
+# Pre-CI/CD Production Checklist
 
 Before Jenkins deployment:
 
@@ -272,7 +506,7 @@ Before Jenkins deployment:
 - [x] Transactional voting
 - [x] Lazy-loading bug fixed for API responses
 - [x] Health endpoint
-- [x] Docker Compose local production-like stack
+- [x] Dockerfile deployment
 - [x] Environment-based database configuration
 - [x] Responsive professional UI
 - [x] Live result refresh without destroying the voter input
@@ -281,7 +515,7 @@ Before Jenkins deployment:
 - [ ] Verified voter identity (OTP/auth) if stronger voting integrity is required
 - [ ] CI/CD pipeline
 
-## Jenkins pipeline target
+# Jenkins Pipeline Target
 
 The intended CI/CD flow is a Jenkins **Pipeline job** using a `Jenkinsfile` stored in this repository:
 
