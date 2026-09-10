@@ -48,13 +48,13 @@ class PollServiceTest {
 
     @Test void voteOnClosedPollThrows() {
         Poll poll = new Poll("Q?"); poll.setOpen(false);
-        when(pollRepository.findById(1L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         assertThrows(PollClosedException.class, () -> service.vote(1L, "Dhruv", 1L));
     }
 
     @Test void voteTwiceBySameVoterThrows() {
         Poll poll = new Poll("Q?");
-        when(pollRepository.findById(1L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.findByPollIdAndVoterId(1L, "device-1")).thenReturn(Optional.of(new Vote(1L, "device-1", "Dhruv", 1L)));
         assertThrows(AlreadyVotedException.class, () -> service.vote(1L, "Dhruv", "device-1", 1L));
     }
@@ -62,7 +62,7 @@ class PollServiceTest {
     @Test void voteWithInvalidOptionThrows() {
         Poll poll = new Poll("Q?"); PollOption opt = new PollOption("Red");
         opt.setId(1L); opt.setPoll(poll); poll.getOptions().add(opt);
-        when(pollRepository.findById(1L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.findByPollIdAndVoterId(1L, "device-1")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> service.vote(1L, "Dhruv", "device-1", 999L));
     }
@@ -70,7 +70,7 @@ class PollServiceTest {
     @Test void voteIncrementsCountCorrectly() {
         Poll poll = new Poll("Q?"); PollOption opt = new PollOption("Red");
         opt.setId(1L); opt.setPoll(poll); poll.getOptions().add(opt);
-        when(pollRepository.findById(1L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.findByPollIdAndVoterId(1L, "device-1")).thenReturn(Optional.empty());
         service.vote(1L, "Dhruv", "device-1", 1L);
         assertEquals(1, opt.getVoteCount());
@@ -78,7 +78,7 @@ class PollServiceTest {
 
     @Test void closePollSetsOpenFalse() {
         Poll poll = new Poll("Q?");
-        when(pollRepository.findById(5L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findWithOptionsById(5L)).thenReturn(Optional.of(poll));
         when(pollRepository.save(any(Poll.class))).thenAnswer(inv -> inv.getArgument(0));
         Poll closed = service.closePoll(5L);
         assertFalse(closed.isOpen());
