@@ -1,17 +1,25 @@
 const API = '/api/polls';
-let voterName = localStorage.getItem('voterName') || '';
+const VOTER_KEY = 'voteflow.voterId';
+const NAME_KEY = 'voteflow.voterName';
+const ADMIN_KEY = 'voteflow.adminTokens';
+
+let voterName = localStorage.getItem(NAME_KEY) || '';
+let voterId = localStorage.getItem(VOTER_KEY);
+let adminTokens = JSON.parse(localStorage.getItem(ADMIN_KEY) || '{}');
 let isLoading = false;
 let firstLoad = true;
 let toastTimer;
 
+if (!voterId) {
+  voterId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(VOTER_KEY, voterId);
+}
+
 const $ = id => document.getElementById(id);
+const sharedCode = location.pathname.match(/^\/p\/([A-Za-z0-9]+)\/?$/)?.[1] || null;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
-
-function setStatus(message = '') {
-  $('status').textContent = message;
 }
 
 function showToast(message) {
@@ -19,45 +27,53 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
 }
 
 async function apiRequest(url, options = {}) {
-  const response = await fetch(url, options);
-  let data = null;
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    data = await response.json().catch(() => null);
-  }
-  if (!response.ok) {
-    throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
-  }
+  const response = await fetch(url, { ...options, cache: 'no-store' });
+  const type = response.headers.get('content-type') || '';
+  const data = type.includes('application/json') ? await response.json().catch(() => null) : null;
+  if (!response.ok) throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
   return data;
 }
 
+function totalVotes(poll) {
+  return poll.options.reduce((sum, option) => sum + Number(option.voteCount || 0), 0);
+}
+
 function renderPoll(poll) {
-  const totalVotes = poll.options.reduce((sum, option) => sum + Number(option.voteCount || 0), 0);
-  const voterInput = poll.open
-    ? `<input class="voter-input" id="voter-${poll.id}" maxlength="80" autocomplete="name" placeholder="Enter your name to vote" value="${escapeHtml(voterName)}" aria-label="Your name for ${escapeHtml(poll.question)}">`
-    : '';
+  const total = totalVotes(poll);
+  const adminToken = adminTokens[poll.shareCode];
+  const isOwner = Boolean(adminToken);
+  const publicUrl = `${location.origin}/p/${encodeURIComponent(poll.shareCode)}`;
 
   const optionsHtml = poll.options.map(option => {
     const votes = Number(option.voteCount || 0);
-    const pct = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
+    const pct = total ? Math.round((votes / total) * 100) : 0;
     return `<div class="option-row">
       <div class="option-line"><span>${escapeHtml(option.text)}</span><span class="option-count">${votes} · ${pct}%</span></div>
-      <div class="bar-bg" aria-label="${pct}% of votes"><div class="bar-fill" style="width:${pct}%"></div></div>
-      ${poll.open ? `<div class="option-actions"><button class="vote-btn" data-action="vote" data-poll="${poll.id}" data-option="${option.id}" type="button">Vote for this</button></div>` : ''}
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+      ${poll.open ? `<button class="vote-btn" data-action="vote" data-poll="${poll.id}" data-option="${option.id}" type="button">Vote for this</button>` : ''}
     </div>`;
   }).join('');
 
   return `<article class="poll" data-poll-id="${poll.id}">
     <div class="poll-header">
-      <div><h3>${escapeHtml(poll.question)} ${!poll.open ? '<span class="closed-tag">CLOSED</span>' : ''}</h3><p class="poll-meta">${poll.open ? 'Voting is open' : 'Voting has ended'} · Poll #${poll.id}</p></div>
+      <div>
+        <div class="poll-status ${poll.open ? 'open' : 'closed'}"><span></span>${poll.open ? 'LIVE NOW' : 'CLOSED'}</div>
+        <h3>${escapeHtml(poll.question)}</h3>
+        <p class="poll-meta">${total} ${total === 1 ? 'vote' : 'votes'} · Share code ${escapeHtml(poll.shareCode)}</p>
+      </div>
+      <button class="copy-btn" data-action="copy" data-url="${escapeHtml(publicUrl)}" type="button">Copy link</button>
     </div>
-    ${voterInput}
+
+    ${poll.open ? `<div class="voter-field"><label for="voter-${poll.id}">Your name</label><input class="voter-input" id="voter-${poll.id}" maxlength="80" autocomplete="name" placeholder="Enter your name to vote" value="${escapeHtml(voterName)}"></div>` : ''}
     <div class="options">${optionsHtml}</div>
-    <div class="poll-footer"><span class="total-votes">${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'} total</span>${poll.open ? `<button class="close-btn" data-action="close" data-poll="${poll.id}" type="button">Close poll</button>` : '<span class="total-votes">Results locked</span>'}</div>
+    <div class="poll-footer">
+      <span class="total-votes">${poll.open ? 'Results update automatically' : 'Results locked'}</span>
+      ${isOwner && poll.open ? `<button class="close-btn" data-action="close" data-poll="${poll.id}" type="button">Close poll</button>` : ''}
+    </div>
     <div class="error" id="error-${poll.id}" role="alert"></div>
   </article>`;
 }
@@ -65,77 +81,87 @@ function renderPoll(poll) {
 async function loadPolls({silent = false} = {}) {
   if (isLoading) return;
   isLoading = true;
-  if (!silent) setStatus('Loading polls…');
+  if (!silent) $('status').textContent = 'Loading…';
   try {
-    const polls = await apiRequest(API);
-    // Critical UI fix: never rebuild the input that currently has focus while a user is typing.
-    // The old 3-second innerHTML refresh destroyed the voter field and caused characters to disappear.
+    const polls = sharedCode
+      ? [await apiRequest(`${API}/public/${encodeURIComponent(sharedCode)}`)]
+      : await apiRequest(API);
+
     const active = document.activeElement;
-    const activePollId = active?.classList?.contains('voter-input') ? active.id.replace('voter-', '') : null;
-    const activeValue = activePollId ? active.value : null;
+    const activeId = active?.classList?.contains('voter-input') ? active.id : null;
+    const activeValue = activeId ? active.value : null;
+
     $('polls').innerHTML = polls.map(renderPoll).join('');
-    $('emptyState').hidden = polls.length !== 0;
-    if (activePollId && activeValue !== null) {
-      const restored = $(`voter-${activePollId}`);
+    $('emptyState').hidden = polls.length > 0;
+
+    if (activeId && activeValue !== null) {
+      const restored = $(activeId);
       if (restored) {
         restored.value = activeValue;
         restored.focus({preventScroll: true});
         try { restored.setSelectionRange(activeValue.length, activeValue.length); } catch (_) {}
       }
     }
-    setStatus(`${polls.length} ${polls.length === 1 ? 'poll' : 'polls'} · updates automatically`);
+
+    $('status').textContent = sharedCode ? 'Live poll · updates automatically' : `${polls.length} ${polls.length === 1 ? 'poll' : 'polls'} · live updates`;
+    if (sharedCode) {
+      $('createSection').hidden = true;
+      $('pollHeading').textContent = 'Vote now';
+      $('pollEyebrow').textContent = 'SHARED POLL';
+    }
     firstLoad = false;
   } catch (error) {
-    setStatus('Unable to load polls. Check that the server is running.');
-    if (firstLoad) {
-      $('polls').innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>Couldn’t connect</h3><p>${escapeHtml(error.message)}</p></div>`;
-    }
+    $('status').textContent = 'Unable to load this poll.';
+    if (firstLoad) $('polls').innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>Couldn’t load poll</h3><p>${escapeHtml(error.message)}</p></div>`;
   } finally {
     isLoading = false;
   }
 }
 
 async function vote(pollId, optionId) {
-  const nameInput = $(`voter-${pollId}`);
-  const errorEl = $(`error-${pollId}`);
-  if (!nameInput) return;
-  voterName = nameInput.value.trim();
-  errorEl.textContent = '';
-  if (!voterName) {
-    nameInput.focus();
-    errorEl.textContent = 'Please enter your name before voting.';
-    return;
-  }
-  if (voterName.length > 80) {
-    errorEl.textContent = 'Name must be 80 characters or fewer.';
-    return;
-  }
-  localStorage.setItem('voterName', voterName);
-  const buttons = document.querySelectorAll(`[data-action="vote"][data-poll="${pollId}"]`);
-  buttons.forEach(button => button.disabled = true);
+  const input = $(`voter-${pollId}`);
+  const error = $(`error-${pollId}`);
+  if (!input) return;
+  const name = input.value.trim();
+  error.textContent = '';
+  if (!name) { input.focus(); error.textContent = 'Enter your name before voting.'; return; }
+
+  document.querySelectorAll(`[data-action="vote"][data-poll="${pollId}"]`).forEach(b => b.disabled = true);
   try {
     await apiRequest(`${API}/${pollId}/vote`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({voterName, optionId})
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Voter-Id': voterId},
+      body: JSON.stringify({voterName: name, optionId})
     });
-    showToast('Vote recorded successfully ✓');
+    voterName = name;
+    localStorage.setItem(NAME_KEY, voterName);
+    showToast('Vote recorded successfully');
     await loadPolls({silent: true});
-  } catch (error) {
-    errorEl.textContent = error.message;
-    buttons.forEach(button => button.disabled = false);
+  } catch (e) {
+    error.textContent = e.message;
+    document.querySelectorAll(`[data-action="vote"][data-poll="${pollId}"]`).forEach(b => b.disabled = false);
   }
 }
 
 async function closePoll(pollId) {
+  const poll = document.querySelector(`[data-poll-id="${pollId}"]`);
+  const code = poll?.querySelector('.poll-meta')?.textContent.match(/Share code (\w+)/)?.[1];
+  const token = code ? adminTokens[code] : null;
+  if (!token) { showToast('Only the poll creator can close this poll'); return; }
   if (!confirm('Close this poll? No more votes will be accepted.')) return;
   try {
-    await apiRequest(`${API}/${pollId}/close`, {method: 'POST'});
-    showToast('Poll closed. Results are now locked.');
+    await apiRequest(`${API}/${pollId}/close`, {method: 'POST', headers: {'X-Poll-Admin-Token': token}});
+    showToast('Poll closed and results locked');
     await loadPolls({silent: true});
-  } catch (error) {
-    const errorEl = $(`error-${pollId}`);
-    if (errorEl) errorEl.textContent = error.message;
+  } catch (e) {
+    const error = $(`error-${pollId}`);
+    if (error) error.textContent = e.message;
   }
+}
+
+async function copyLink(url) {
+  try { await navigator.clipboard.writeText(url); showToast('Poll link copied'); }
+  catch (_) { prompt('Copy this poll link:', url); }
 }
 
 $('polls').addEventListener('click', event => {
@@ -144,12 +170,13 @@ $('polls').addEventListener('click', event => {
   const pollId = Number(button.dataset.poll);
   if (button.dataset.action === 'vote') vote(pollId, Number(button.dataset.option));
   if (button.dataset.action === 'close') closePoll(pollId);
+  if (button.dataset.action === 'copy') copyLink(button.dataset.url);
 });
 
 $('polls').addEventListener('input', event => {
   if (event.target.classList.contains('voter-input')) {
     voterName = event.target.value;
-    localStorage.setItem('voterName', voterName);
+    localStorage.setItem(NAME_KEY, voterName);
   }
 });
 
@@ -159,30 +186,38 @@ $('createForm').addEventListener('submit', async event => {
   const opt1 = $('opt1').value.trim();
   const opt2 = $('opt2').value.trim();
   $('createError').textContent = '';
-  if (!question || !opt1 || !opt2) {
-    $('createError').textContent = 'Please fill in the question and both options.';
-    return;
-  }
+  if (!question || !opt1 || !opt2) { $('createError').textContent = 'Please complete all fields.'; return; }
+
   const button = $('createBtn');
   button.disabled = true;
-  button.querySelector('span').textContent = 'Creating…';
+  button.querySelector('.btn-label').textContent = 'Creating…';
   try {
-    await apiRequest(API, {
+    const result = await apiRequest(API, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({question, options: [opt1, opt2]})
     });
+    adminTokens[result.poll.shareCode] = result.adminToken;
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(adminTokens));
     event.target.reset();
-    showToast('Poll created successfully ✓');
+    showToast('Poll created — your private creator key is saved on this device');
     await loadPolls({silent: true});
-  } catch (error) {
-    $('createError').textContent = error.message;
+    setTimeout(() => copyLink(`${location.origin}/p/${result.poll.shareCode}`), 250);
+  } catch (e) {
+    $('createError').textContent = e.message;
   } finally {
     button.disabled = false;
-    button.querySelector('span').textContent = 'Create poll';
+    button.querySelector('.btn-label').textContent = 'Create poll';
   }
 });
 
 $('refreshBtn').addEventListener('click', () => loadPolls());
+
+if (sharedCode) {
+  $('createSection').hidden = true;
+  $('homeLink').setAttribute('href', '/');
+} else {
+  $('homeLink').setAttribute('href', '#');
+}
+
 loadPolls();
-// Refresh results without interrupting a name being typed.
 setInterval(() => loadPolls({silent: true}), 5000);
