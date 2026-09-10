@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voteflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: votingdb
+      POSTGRES_USER: voting
+      POSTGRES_PASSWORD: voting_local_only
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voting -d votingdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: voteflow-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8092
+      DATABASE_URL: jdbc:postgresql://postgres:5432/votingdb
+      DATABASE_USERNAME: voting
+      DATABASE_PASSWORD: voting_local_only
+      DDL_AUTO: update
+    ports:
+      - "8092:8092"
+
+volumes:
+  postgres_data:
