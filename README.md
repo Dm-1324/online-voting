@@ -9,12 +9,12 @@ VoteFlow is a Spring Boot live-polling application. A creator can create a poll,
 ```text
 Browser
    │
-   │ HTTPS / REST
+   │ HTTP/HTTPS
    ▼
-Spring Boot API + static UI
+EC2 — Spring Boot API + static UI
    │
    ▼
-PostgreSQL (production)
+Neon PostgreSQL (production)
 ```
 
 The app also supports H2 automatically for simple local development.
@@ -33,6 +33,8 @@ The app also supports H2 automatically for simple local development.
 - Server-side validation and global error handling
 - Transactional vote recording
 - PostgreSQL-ready configuration
+- Neon-compatible SSL PostgreSQL connection
+- Small Hikari connection pool suitable for a free/small database plan
 - Actuator health endpoint for deployment checks: `/actuator/health`
 - Maven tests + JaCoCo coverage
 - Docker and Docker Compose support
@@ -86,6 +88,53 @@ To also remove the local PostgreSQL volume/data:
 docker compose down -v
 ```
 
+## Neon PostgreSQL — recommended low-cost production database
+
+Neon provides managed PostgreSQL and currently has a Free plan. Neon documents a Free plan with 10 projects, 0.5 GB storage per project, 50 CU-hours/month per project, 5 GB egress/month, and scale-to-zero behavior. Limits can change, so check the current Neon pricing page before relying on a free tier for sustained public traffic. citeturn0search0
+
+Neon works with Java/JDBC. Neon requires encrypted connections and provides the database connection string from the project's **Connect** dialog. citeturn0search8turn0search12
+
+### Create the Neon database
+
+1. Create a Neon project.
+2. Use a stable PostgreSQL release such as PostgreSQL 17 for this application.
+3. Open **Connect** in the Neon dashboard.
+4. Copy the PostgreSQL connection details.
+5. Convert the connection string to the JDBC form used by Spring Boot:
+
+```text
+jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require&channelBinding=require
+```
+
+6. Set these variables on the EC2 host or through your deployment secret mechanism:
+
+```text
+DATABASE_URL=jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require&channelBinding=require
+DATABASE_USERNAME=YOUR_NEON_USERNAME
+DATABASE_PASSWORD=YOUR_NEON_PASSWORD
+DDL_AUTO=update
+PORT=8092
+DB_MAX_POOL_SIZE=5
+DB_MIN_IDLE=0
+```
+
+Spring Boot supports environment variables and externalized configuration, so these values do not need to be committed to Git. citeturn1search2
+
+For this project, **EC2 + Neon** is a good fit:
+
+```text
+Public users
+     │
+     ▼
+EC2 / VoteFlow
+     │
+     │ TLS PostgreSQL
+     ▼
+Neon PostgreSQL
+```
+
+Neon should be treated as the persistent source of truth for polls and votes; do not put database credentials in the Docker image or Git repository.
+
 ## How public voting works
 
 ### 1. Create a poll
@@ -99,6 +148,12 @@ The server generates:
 - a private creator token
 
 The creator receives a link similar to:
+
+```text
+http://YOUR_EC2_PUBLIC_IP:8092/p/7XK92A
+```
+
+or, after adding a domain and HTTPS:
 
 ```text
 https://your-domain.com/p/7XK92A
@@ -153,16 +208,6 @@ Do not expose or commit this token.
 }
 ```
 
-The response contains:
-
-```json
-{
-  "poll": { "id": 1, "shareCode": "7XK92A" },
-  "adminToken": "private-token",
-  "shareUrl": "/p/7XK92A"
-}
-```
-
 ### Vote
 
 Header:
@@ -188,22 +233,6 @@ Header:
 X-Poll-Admin-Token: <creator-token>
 ```
 
-## Production database configuration
-
-Set these environment variables in the deployment environment; do not hard-code credentials in Git:
-
-```text
-DATABASE_URL=jdbc:postgresql://HOST:5432/votingdb
-DATABASE_USERNAME=voting
-DATABASE_PASSWORD=CHANGE_ME
-PORT=8092
-DDL_AUTO=update
-```
-
-See `.env.example` for the variable names.
-
-For a serious production database, use managed PostgreSQL, automated backups, restricted network access, TLS, and a migration tool such as Flyway rather than relying indefinitely on Hibernate `ddl-auto=update`.
-
 ## Docker
 
 Build:
@@ -212,33 +241,42 @@ Build:
 docker build -t online-voting .
 ```
 
-Run against an externally configured database:
+Run against Neon or another externally configured PostgreSQL database:
 
 ```bash
 docker run --rm -p 8092:8092 \
-  -e DATABASE_URL="jdbc:postgresql://HOST:5432/votingdb" \
+  -e DATABASE_URL="jdbc:postgresql://HOST/DBNAME?sslmode=require&channelBinding=require" \
   -e DATABASE_USERNAME="voting" \
   -e DATABASE_PASSWORD="CHANGE_ME" \
   online-voting
 ```
+
+## Why the poll page previously returned HTTP 500
+
+The application intentionally sets `spring.jpa.open-in-view=false`. Spring Boot documents that Open EntityManager in View is what normally keeps a Hibernate session available to lazy-load associations during web response rendering. citeturn2search0
+
+`Poll.options` is a lazy JPA collection. The API was returning a `Poll` and Jackson was trying to serialize `options` after the repository session had already closed. That can produce a `LazyInitializationException` and the browser then displayed **Internal Server Error**.
+
+The repository now uses fetch-join queries for poll reads so `Poll.options` is loaded before the entity leaves the data-access layer. This keeps `open-in-view=false` and avoids relying on a long-lived Hibernate session during HTTP response rendering.
 
 ## Pre-CI/CD production checklist
 
 Before Jenkins deployment:
 
 - [x] Persistent PostgreSQL support
+- [x] Neon-compatible database configuration
 - [x] Public shareable poll URLs
 - [x] Creator-only close operation
 - [x] Server-side vote validation
 - [x] Database-backed duplicate-vote constraint
 - [x] Transactional voting
+- [x] Lazy-loading bug fixed for API responses
 - [x] Health endpoint
 - [x] Docker Compose local production-like stack
 - [x] Environment-based database configuration
 - [x] Responsive professional UI
 - [x] Live result refresh without destroying the voter input
 - [ ] HTTPS/domain/reverse proxy
-- [ ] Managed PostgreSQL + backups
 - [ ] Production rate limiting/WAF
 - [ ] Verified voter identity (OTP/auth) if stronger voting integrity is required
 - [ ] CI/CD pipeline
@@ -266,7 +304,7 @@ Docker build
    ↓
 Push image to container registry
    ↓
-Deploy to AWS
+Deploy to AWS EC2
    ↓
 Health check
 ```
