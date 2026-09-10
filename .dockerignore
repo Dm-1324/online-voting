@@ -1,0 +1,12 @@
+target/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+src/main/resources/application-local.properties
+.idea/
+.vscode/
+*.iml
+*.log
+README.md
