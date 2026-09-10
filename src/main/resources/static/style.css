@@ -1,0 +1,15 @@
+body { font-family: sans-serif; background: #111; color: #eee; max-width: 700px; margin: 40px auto; padding: 0 16px; }
+h1 { color: #ffd166; }
+form { margin-bottom: 30px; display: flex; gap: 8px; flex-wrap: wrap; }
+input { padding: 8px; flex: 1; min-width: 120px; }
+button { padding: 8px 14px; background: #ffd166; border: none; cursor: pointer; font-weight: bold; }
+.poll { background: #1b1b2b; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.poll h3 { margin-top: 0; }
+.option-row { margin: 8px 0; }
+.bar-bg { background: #2a2a40; border-radius: 4px; overflow: hidden; height: 26px; position: relative; }
+.bar-fill { background: #ffd166; height: 100%; transition: width 0.3s; }
+.bar-label { position: absolute; left: 8px; top: 3px; font-size: 13px; }
+.vote-btn { margin-left: 8px; padding: 4px 10px; cursor: pointer; }
+.closed-tag { color: #ff6c6c; font-size: 12px; margin-left: 8px; }
+.error { color: #ff6c6c; font-size: 13px; }
+.voter-input { padding: 6px; margin-bottom: 8px; width: 150px; }
