@@ -31,17 +31,34 @@ public class PollService {
     @Autowired private PollOptionRepository optionRepository;
     @Autowired private VoteRepository voteRepository;
 
-    public List<Poll> getAll() { return pollRepository.findAllWithOptions(); }
+    public List<Poll> getAll() {
+        List<Poll> polls = pollRepository.findAllWithOptions();
+        polls.forEach(this::attachVoterNames);
+        return polls;
+    }
 
     public Poll getById(Long id) {
-        return pollRepository.findWithOptionsById(id)
+        Poll poll = pollRepository.findWithOptionsById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+        attachVoterNames(poll);
+        return poll;
     }
 
     public Poll getByShareCode(String shareCode) {
         if (shareCode == null || shareCode.isBlank()) throw new IllegalArgumentException("Poll link is invalid");
-        return pollRepository.findWithOptionsByShareCode(shareCode.trim().toUpperCase())
+        Poll poll = pollRepository.findWithOptionsByShareCode(shareCode.trim().toUpperCase())
                 .orElseThrow(() -> new IllegalArgumentException("Poll not found"));
+        attachVoterNames(poll);
+        return poll;
+    }
+
+    private void attachVoterNames(Poll poll) {
+        poll.getOptions().forEach(option -> option.setVoterNames(
+                voteRepository.findByPollIdAndOptionIdOrderByIdAsc(poll.getId(), option.getId())
+                        .stream()
+                        .map(Vote::getVoterName)
+                        .toList()
+        ));
     }
 
     @Transactional
