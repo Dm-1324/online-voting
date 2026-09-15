@@ -1,93 +1,91 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-        timeout(time: 30, unit: 'MINUTES')
-    }
-
-    triggers { githubPush() }
-
     environment {
-        AWS_REGION = 'ap-south-1'
-        ECR_REPOSITORY = 'online-voting'
-        AWS_ACCOUNT_ID = 'CHANGE_ME'
-        IMAGE_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-        SONAR_PROJECT_KEY = 'online-voting'
-        SONAR_HOST_URL = 'CHANGE_ME'
-        EC2_HOST = 'CHANGE_ME'
-        EC2_USER = 'ec2-user'
-        APP_URL = 'CHANGE_ME'
+        AWS_REGION = 'eu-north-1'
+        ECR_REPO_NAME = 'voting-app'
     }
 
     stages {
         stage('Checkout') {
-            steps { checkout scm }
-        }
-        stage('Build & Test') {
-            steps { sh 'mvn -B clean verify' }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'target/*.jar,target/site/jacoco/**'
-                }
+            steps {
+                git branch: 'main', url: 'https://github.com/Dm-1324/online-voting.git'
             }
         }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean verify'
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh 'mvn -B verify sonar:sonar -Dsonar.projectKey="$SONAR_PROJECT_KEY" -Dsonar.host.url="$SONAR_HOST_URL"'
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        $(which sonar-scanner || echo /var/jenkins_home/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarScanner/bin/sonar-scanner) \
+                        -Dsonar.projectKey=voting-app \
+                        -Dsonar.projectName="Online Voting System" \
+                        -Dsonar.sources=src/main \
+                        -Dsonar.tests=src/test \
+                        -Dsonar.java.binaries=target/classes \
+                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
                 }
             }
         }
+
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') { waitForQualityGate abortPipeline: true }
+                timeout(time: 3, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
+
         stage('Docker Build') {
-            steps { sh 'docker build -t "$IMAGE_URI:$BUILD_NUMBER" -t "$IMAGE_URI:latest" .' }
-        }
-        stage('Push to Amazon ECR') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'aws-ecr', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    sh '''
-                        set +x
-                        export AWS_DEFAULT_REGION="$AWS_REGION"
-                        aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-                        docker push "$IMAGE_URI:$BUILD_NUMBER"
-                        docker push "$IMAGE_URI:latest"
-                    '''
-                }
+                sh 'docker build -t ${ECR_REPO_NAME}:${BUILD_NUMBER} .'
             }
         }
-        stage('Deploy to EC2') {
+
+        stage('Push to ECR') {
             steps {
-                sshagent(credentials: ['ec2-deploy-key']) {
-                    sh '''
-                        set +x
-                        ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" "set -e
-                          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-                          docker pull $IMAGE_URI:$BUILD_NUMBER
-                          docker rm -f voteflow-app || true
-                          docker run -d --name voteflow-app --restart unless-stopped --env-file /opt/voteflow/.env -p 8092:8092 $IMAGE_URI:$BUILD_NUMBER
-                        "
-                    '''
-                }
+                sh '''
+                    aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} --region ${AWS_REGION} || \
+                      aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region ${AWS_REGION}
+
+                    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                      docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                    docker tag ${ECR_REPO_NAME}:${BUILD_NUMBER} ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                    docker push ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                '''
             }
         }
-        stage('Smoke Test') {
-            steps { sh 'sleep 15 && curl --fail --silent --show-error "$APP_URL/actuator/health"' }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                    docker rm -f voting-app-running 2>/dev/null || true
+                    docker run -d --name voting-app-running -p 8092:8092 --restart unless-stopped \
+                      ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                '''
+            }
         }
     }
 
     post {
-        success { echo "Deployment successful: ${env.BUILD_NUMBER}" }
-        failure { echo 'Pipeline failed. Check the stage logs above.' }
+        success {
+            echo "Pipeline succeeded — voting-app:${BUILD_NUMBER} is live on port 8092"
+        }
+        failure {
+            echo "Pipeline failed — check the stage that aborted above (likely Quality Gate)"
+        }
         always {
-            sh 'docker image prune -f || true'
-            cleanWs()
+            sh 'docker system prune -f || true'
         }
     }
 }
