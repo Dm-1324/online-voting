@@ -294,7 +294,7 @@ class PollServiceTest {
         String token = service.loginAdmin(ADMIN_USER, ADMIN_PASS).token();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.countByPollId(1L)).thenReturn(5L);
-        assertThrows(IllegalArgumentException.class, () -> service.updatePoll(1L, "Updated?", List.of("Only one"), token, null, null));
+        assertThrows(IllegalArgumentException.class, () -> service.updatePoll(1L, "Updated?", List.of("X", "Y", "Z"), token, null, null));
     }
 
     @Test void updatePollWithWrongCreatorTokenThrowsUnauthorized() {
