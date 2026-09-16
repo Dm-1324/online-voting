@@ -7,12 +7,6 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/Dm-1324/online-voting.git'
-            }
-        }
-
         stage('Build') {
             steps {
                 sh 'mvn clean verify'
@@ -22,15 +16,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        $(which sonar-scanner || echo /var/jenkins_home/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarScanner/bin/sonar-scanner) \
-                        -Dsonar.projectKey=voting-app \
-                        -Dsonar.projectName="Online Voting System" \
-                        -Dsonar.sources=src/main \
-                        -Dsonar.tests=src/test \
-                        -Dsonar.java.binaries=target/classes \
-                        -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-                    '''
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=voting-app -Dsonar.projectName="Online Voting System"'
                 }
             }
         }
@@ -67,22 +53,28 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh '''
-                    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-                    docker rm -f voting-app-running 2>/dev/null || true
-                    docker run -d --name voting-app-running -p 8092:8092 --restart unless-stopped \
-                      ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
-                '''
+                withCredentials([string(credentialsId: 'neon-db-password', variable: 'NEON_DB_PASSWORD')]) {
+                    sh '''
+                        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                        docker rm -f voting-app-running 2>/dev/null || true
+                        docker run -d --name voting-app-running -p 8092:8092 --restart unless-stopped \
+                          -e DATABASE_URL="jdbc:postgresql://ep-sweet-term-zalx3lt8-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require&channelBinding=require" \
+                          -e DATABASE_USERNAME="neondb_owner" \
+                          -e DATABASE_PASSWORD="${NEON_DB_PASSWORD}" \
+                          -e DDL_AUTO="update" \
+                          ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline succeeded — voting-app:${BUILD_NUMBER} is live on port 8092"
+            echo "Pipeline succeeded — voting-app:${BUILD_NUMBER} is live on port 8092, using Neon PostgreSQL"
         }
         failure {
-            echo "Pipeline failed — check the stage that aborted above (likely Quality Gate)"
+            echo "Pipeline failed — check the stage that aborted above"
         }
         always {
             sh 'docker system prune -f || true'
