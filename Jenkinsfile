@@ -13,15 +13,17 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
+stage('SonarQube Analysis') {
     steps {
         withSonarQubeEnv('SonarQube') {
             sh '''
+                export MAVEN_OPTS="-Xmx1024m"
                 mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.10.0.2594:sonar \
                 -Dsonar.projectKey=voting-app \
                 -Dsonar.projectName="Online Voting System" \
-                -Dsonar.sources=src/main \
+                -Dsonar.sources=src/main/java \
                 -Dsonar.tests=src/test \
+                -Dsonar.exclusions=src/main/resources/static/** \
                 -Dsonar.java.binaries=target/classes \
                 -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
             '''
