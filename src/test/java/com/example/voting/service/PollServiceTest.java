@@ -19,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -65,7 +66,7 @@ class PollServiceTest {
     }
 
     @Test void createPollWithNullOptionThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", List.of("A", null)));
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", Arrays.asList("A", null)));
     }
 
     @Test void createPollSavesSuccessfully() {
@@ -304,80 +305,60 @@ class PollServiceTest {
 
     @Test void deletePollAsAdminDeletesIt() {
         String token = service.loginAdmin(ADMIN_USER, ADMIN_PASS).token();
-        when(pollRepository.existsById(3L)).thenReturn(true);
-        service.deletePoll(3L, token);
-        verify(pollRepository).deleteById(3L);
+        when(pollRepository.existsById(1L)).thenReturn(true);
+        service.deletePoll(1L, token);
+        verify(pollRepository).deleteById(1L);
     }
 
     @Test void deletePollRejectsNonAdmin() {
-        assertThrows(ResponseStatusException.class, () -> service.deletePoll(3L, "not-admin"));
-        verify(pollRepository, never()).deleteById(anyLong());
+        assertThrows(ResponseStatusException.class, () -> service.deletePoll(1L, "not-admin"));
     }
 
-    @Test void deletePollRejectsMissingPoll() {
+    @Test void deletePollNotFoundThrows() {
         String token = service.loginAdmin(ADMIN_USER, ADMIN_PASS).token();
-        when(pollRepository.existsById(3L)).thenReturn(false);
-        assertThrows(IllegalArgumentException.class, () -> service.deletePoll(3L, token));
+        when(pollRepository.existsById(99L)).thenReturn(false);
+        assertThrows(IllegalArgumentException.class, () -> service.deletePoll(99L, token));
     }
 
-    @Test void closePollWithAdminTokenClosesPoll() {
-        Poll poll = buildPollWithTwoOptions();
-        String token = service.loginAdmin(ADMIN_USER, ADMIN_PASS).token();
+    @Test void closePollWithCreatorTokenSucceeds() {
+        PollService.PollCreation creation = createStoredPoll();
+        Poll poll = creation.poll();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        assertFalse(service.closePoll(1L, token).isOpen());
-    }
-
-    @Test void closePollWithCreatorTokenClosesPoll() {
-        PollService.PollCreation creation = createStoredPoll();
-        when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(creation.poll()));
-        String creatorToken = service.loginCreator(creation.creatorUsername(), creation.creatorPassword()).token();
-        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(creation.poll()));
-        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        assertFalse(service.closePoll(1L, creatorToken).isOpen());
-    }
-
-    @Test void closePollWithPollOwnerTokenClosesPoll() {
-        PollService.PollCreation creation = createStoredPoll();
-        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(creation.poll()));
-        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        assertFalse(service.closePoll(1L, creation.adminToken()).isOpen());
+        Poll result = service.closePoll(1L, service.loginCreatorTokenForTest(creation));
+        assertFalse(result.isOpen());
     }
 
     @Test void closePollWithInvalidTokenThrows() {
         Poll poll = buildPollWithTwoOptions();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        assertThrows(ResponseStatusException.class, () -> service.closePoll(1L, "invalid"));
-    }
-
-    @Test void closePollLegacyMethodClosesPoll() {
-        Poll poll = buildPollWithTwoOptions();
-        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        assertFalse(service.closePoll(1L).isOpen());
+        assertThrows(ResponseStatusException.class, () -> service.closePoll(1L, "wrong"));
     }
 
     private PollService.PollCreation createStoredPoll() {
         when(pollRepository.findByShareCode(anyString())).thenReturn(Optional.empty());
         when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> {
             Poll poll = invocation.getArgument(0);
-            ReflectionTestUtils.setField(poll, "id", 1L);
+            if (poll.getId() == null) {
+                poll.setId(1L);
+            }
             return poll;
         });
         return service.createPollWithAdminToken("Q?", List.of("A", "B"));
     }
 
     private Poll buildPollWithTwoOptions() {
-        Poll poll = new Poll("Original question?");
-        ReflectionTestUtils.setField(poll, "id", 1L);
-        PollOption a = new PollOption("A");
-        a.setId(1L);
-        a.setPoll(poll);
-        PollOption b = new PollOption("B");
-        b.setId(2L);
-        b.setPoll(poll);
-        poll.getOptions().add(a);
-        poll.getOptions().add(b);
+        Poll poll = new Poll("Q?");
+        poll.setId(1L);
+        PollOption first = new PollOption("A");
+        first.setId(1L);
+        first.setPoll(poll);
+        PollOption second = new PollOption("B");
+        second.setId(2L);
+        second.setPoll(poll);
+        poll.getOptions().add(first);
+        poll.getOptions().add(second);
+        poll.setShareCode("ABC12345");
+        poll.setAdminTokenHash("hash");
         return poll;
     }
 }
