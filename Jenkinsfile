@@ -14,12 +14,20 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.10.0.2594:sonar -Dsonar.projectKey=voting-app -Dsonar.projectName="Online Voting System"'
-                }
-            }
+    steps {
+        withSonarQubeEnv('SonarQube') {
+            sh '''
+                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.10.0.2594:sonar \
+                -Dsonar.projectKey=voting-app \
+                -Dsonar.projectName="Online Voting System" \
+                -Dsonar.sources=src/main \
+                -Dsonar.tests=src/test \
+                -Dsonar.java.binaries=target/classes \
+                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            '''
         }
+    }
+}
 
         stage('Quality Gate') {
             steps {
