@@ -13,23 +13,23 @@ pipeline {
             }
         }
 
-stage('SonarQube Analysis') {
-    steps {
-        withSonarQubeEnv('SonarQube') {
-            sh '''
-                export MAVEN_OPTS="-Xmx1024m"
-                mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.10.0.2594:sonar \
-                -Dsonar.projectKey=voting-app \
-                -Dsonar.projectName="Online Voting System" \
-                -Dsonar.sources=src/main/java \
-                -Dsonar.tests=src/test \
-                -Dsonar.exclusions=src/main/resources/static/** \
-                -Dsonar.java.binaries=target/classes \
-                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-            '''
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        export MAVEN_OPTS="-Xmx1024m"
+                        mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.10.0.2594:sonar \
+                          -Dsonar.projectKey=voting-app \
+                          -Dsonar.projectName="Online Voting System" \
+                          -Dsonar.sources=src/main/java \
+                          -Dsonar.tests=src/test \
+                          -Dsonar.exclusions=src/main/resources/static/** \
+                          -Dsonar.java.binaries=target/classes \
+                          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
+                }
+            }
         }
-    }
-}
 
         stage('Quality Gate') {
             steps {
@@ -63,7 +63,12 @@ stage('SonarQube Analysis') {
 
         stage('Deploy') {
             steps {
-                withCredentials([string(credentialsId: 'neon-db-password', variable: 'NEON_DB_PASSWORD')]) {
+                withCredentials([
+                    string(credentialsId: 'neon-db-password', variable: 'NEON_DB_PASSWORD'),
+                    usernamePassword(credentialsId: 'admin-credentials',
+                                     usernameVariable: 'ADMIN_USERNAME',
+                                     passwordVariable: 'ADMIN_PASSWORD')
+                ]) {
                     sh '''
                         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
                         docker rm -f voting-app-running 2>/dev/null || true
@@ -71,6 +76,8 @@ stage('SonarQube Analysis') {
                           -e DATABASE_URL="jdbc:postgresql://ep-sweet-term-zalx3lt8-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require&channelBinding=require" \
                           -e DATABASE_USERNAME="neondb_owner" \
                           -e DATABASE_PASSWORD="${NEON_DB_PASSWORD}" \
+                          -e ADMIN_USERNAME="${ADMIN_USERNAME}" \
+                          -e ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
                           -e DDL_AUTO="update" \
                           ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${BUILD_NUMBER}
                     '''
