@@ -5,8 +5,7 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"poll_id", "voter_id"}))
 public class Vote {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "poll_id", nullable = false)
@@ -21,15 +20,14 @@ public class Vote {
     @Column(name = "option_id", nullable = false)
     private Long optionId;
 
+    @Column(name = "custom_text", length = 200)
+    private String customText;
+
     public Vote() {}
-    public Vote(Long pollId, String voterName, Long optionId) {
-        this(pollId, voterName, voterName, optionId);
-    }
-    public Vote(Long pollId, String voterId, String voterName, Long optionId) {
-        this.pollId = pollId;
-        this.voterId = voterId;
-        this.voterName = voterName;
-        this.optionId = optionId;
+    public Vote(Long pollId, String voterName, Long optionId) { this(pollId, voterName, voterName, optionId, null); }
+    public Vote(Long pollId, String voterId, String voterName, Long optionId) { this(pollId, voterId, voterName, optionId, null); }
+    public Vote(Long pollId, String voterId, String voterName, Long optionId, String customText) {
+        this.pollId = pollId; this.voterId = voterId; this.voterName = voterName; this.optionId = optionId; this.customText = customText;
     }
 
     public Long getId() { return id; }
@@ -41,4 +39,6 @@ public class Vote {
     public void setVoterName(String voterName) { this.voterName = voterName; }
     public Long getOptionId() { return optionId; }
     public void setOptionId(Long optionId) { this.optionId = optionId; }
+    public String getCustomText() { return customText; }
+    public void setCustomText(String customText) { this.customText = customText; }
 }

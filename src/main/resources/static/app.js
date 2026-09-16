@@ -1,228 +1,27 @@
-const API = '/api/polls';
-const VOTER_KEY = 'voteflow.voterId';
-const NAME_KEY = 'voteflow.voterName';
-const ADMIN_KEY = 'voteflow.adminTokens';
-
-let voterName = localStorage.getItem(NAME_KEY) || '';
-let voterId = localStorage.getItem(VOTER_KEY);
-let adminTokens = JSON.parse(localStorage.getItem(ADMIN_KEY) || '{}');
-let isLoading = false;
-let firstLoad = true;
-let toastTimer;
-
-if (!voterId) {
-  voterId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  localStorage.setItem(VOTER_KEY, voterId);
-}
-
-const $ = id => document.getElementById(id);
-const sharedCode = location.pathname.match(/^\/p\/([A-Za-z0-9]+)\/?$/)?.[1] || null;
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
-
-function showToast(message) {
-  const toast = $('toast');
-  toast.textContent = message;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
-}
-
-async function apiRequest(url, options = {}) {
-  const response = await fetch(url, { ...options, cache: 'no-store' });
-  const type = response.headers.get('content-type') || '';
-  const data = type.includes('application/json') ? await response.json().catch(() => null) : null;
-  if (!response.ok) throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
-  return data;
-}
-
-function totalVotes(poll) {
-  return poll.options.reduce((sum, option) => sum + Number(option.voteCount || 0), 0);
-}
-
-function renderPoll(poll) {
-  const total = totalVotes(poll);
-  const adminToken = adminTokens[poll.shareCode];
-  const isOwner = Boolean(adminToken);
-  const publicUrl = `${location.origin}/p/${encodeURIComponent(poll.shareCode)}`;
-
-  const optionsHtml = poll.options.map(option => {
-    const votes = Number(option.voteCount || 0);
-    const pct = total ? Math.round((votes / total) * 100) : 0;
-    const voterNames = Array.isArray(option.voterNames) ? option.voterNames : [];
-    const voterText = voterNames.length ? voterNames.join(', ') : 'No voters yet';
-    const voterList = voterNames.length
-      ? voterNames.map(name => `<li>${escapeHtml(name)}</li>`).join('')
-      : '<li>No voters yet</li>';
-    return `<div class="option-row">
-      <div class="option-line"><span>${escapeHtml(option.text)}</span><span class="option-count voter-details" tabindex="0" aria-label="${escapeHtml(voterText)}">${votes} · ${pct}%<span class="voter-tooltip" role="tooltip"><strong>Voters</strong><ul>${voterList}</ul></span></span></div>
-      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
-      ${poll.open ? `<button class="vote-btn" data-action="vote" data-poll="${poll.id}" data-option="${option.id}" type="button">Vote for this</button>` : ''}
-    </div>`;
-  }).join('');
-
-  return `<article class="poll" data-poll-id="${poll.id}">
-    <div class="poll-header">
-      <div>
-        <div class="poll-status ${poll.open ? 'open' : 'closed'}"><span></span>${poll.open ? 'LIVE NOW' : 'CLOSED'}</div>
-        <h3>${escapeHtml(poll.question)}</h3>
-        <p class="poll-meta">${total} ${total === 1 ? 'vote' : 'votes'} · Share code ${escapeHtml(poll.shareCode)}</p>
-      </div>
-      <button class="copy-btn" data-action="copy" data-url="${escapeHtml(publicUrl)}" type="button">Copy link</button>
-    </div>
-
-    ${poll.open ? `<div class="voter-field"><label for="voter-${poll.id}">Your name</label><input class="voter-input" id="voter-${poll.id}" maxlength="80" autocomplete="name" placeholder="Enter your name to vote" value="${escapeHtml(voterName)}"></div>` : ''}
-    <div class="options">${optionsHtml}</div>
-    <div class="poll-footer">
-      <span class="total-votes">${poll.open ? 'Results update automatically · Hover a result to see voters' : 'Results locked · Hover a result to see voters'}</span>
-      ${isOwner && poll.open ? `<button class="close-btn" data-action="close" data-poll="${poll.id}" type="button">Close poll</button>` : ''}
-    </div>
-    <div class="error" id="error-${poll.id}" role="alert"></div>
-  </article>`;
-}
-
-async function loadPolls({silent = false} = {}) {
-  if (isLoading) return;
-  isLoading = true;
-  if (!silent) $('status').textContent = 'Loading…';
-  try {
-    const polls = sharedCode
-      ? [await apiRequest(`${API}/public/${encodeURIComponent(sharedCode)}`)]
-      : await apiRequest(API);
-
-    const active = document.activeElement;
-    const activeId = active?.classList?.contains('voter-input') ? active.id : null;
-    const activeValue = activeId ? active.value : null;
-
-    $('polls').innerHTML = polls.map(renderPoll).join('');
-    $('emptyState').hidden = polls.length > 0;
-
-    if (activeId && activeValue !== null) {
-      const restored = $(activeId);
-      if (restored) {
-        restored.value = activeValue;
-        restored.focus({preventScroll: true});
-        try { restored.setSelectionRange(activeValue.length, activeValue.length); } catch (_) {}
-      }
-    }
-
-    $('status').textContent = sharedCode ? 'Live poll · updates automatically' : `${polls.length} ${polls.length === 1 ? 'poll' : 'polls'} · live updates`;
-    if (sharedCode) {
-      $('createSection').hidden = true;
-      $('pollHeading').textContent = 'Vote now';
-      $('pollEyebrow').textContent = 'SHARED POLL';
-    }
-    firstLoad = false;
-  } catch (error) {
-    $('status').textContent = 'Unable to load this poll.';
-    if (firstLoad) $('polls').innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>Couldn’t load poll</h3><p>${escapeHtml(error.message)}</p></div>`;
-  } finally {
-    isLoading = false;
-  }
-}
-
-async function vote(pollId, optionId) {
-  const input = $(`voter-${pollId}`);
-  const error = $(`error-${pollId}`);
-  if (!input) return;
-  const name = input.value.trim();
-  error.textContent = '';
-  if (!name) { input.focus(); error.textContent = 'Enter your name before voting.'; return; }
-
-  document.querySelectorAll(`[data-action="vote"][data-poll="${pollId}"]`).forEach(b => b.disabled = true);
-  try {
-    await apiRequest(`${API}/${pollId}/vote`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Voter-Id': voterId},
-      body: JSON.stringify({voterName: name, optionId})
-    });
-    voterName = name;
-    localStorage.setItem(NAME_KEY, voterName);
-    showToast('Vote recorded successfully');
-    await loadPolls({silent: true});
-  } catch (e) {
-    error.textContent = e.message;
-    document.querySelectorAll(`[data-action="vote"][data-poll="${pollId}"]`).forEach(b => b.disabled = false);
-  }
-}
-
-async function closePoll(pollId) {
-  const poll = document.querySelector(`[data-poll-id="${pollId}"]`);
-  const code = poll?.querySelector('.poll-meta')?.textContent.match(/Share code (\w+)/)?.[1];
-  const token = code ? adminTokens[code] : null;
-  if (!token) { showToast('Only the poll creator can close this poll'); return; }
-  if (!confirm('Close this poll? No more votes will be accepted.')) return;
-  try {
-    await apiRequest(`${API}/${pollId}/close`, {method: 'POST', headers: {'X-Poll-Admin-Token': token}});
-    showToast('Poll closed and results locked');
-    await loadPolls({silent: true});
-  } catch (e) {
-    const error = $(`error-${pollId}`);
-    if (error) error.textContent = e.message;
-  }
-}
-
-async function copyLink(url) {
-  try { await navigator.clipboard.writeText(url); showToast('Poll link copied'); }
-  catch (_) { prompt('Copy this poll link:', url); }
-}
-
-$('polls').addEventListener('click', event => {
-  const button = event.target.closest('button[data-action]');
-  if (!button) return;
-  const pollId = Number(button.dataset.poll);
-  if (button.dataset.action === 'vote') vote(pollId, Number(button.dataset.option));
-  if (button.dataset.action === 'close') closePoll(pollId);
-  if (button.dataset.action === 'copy') copyLink(button.dataset.url);
-});
-
-$('polls').addEventListener('input', event => {
-  if (event.target.classList.contains('voter-input')) {
-    voterName = event.target.value;
-    localStorage.setItem(NAME_KEY, voterName);
-  }
-});
-
-$('createForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const question = $('question').value.trim();
-  const opt1 = $('opt1').value.trim();
-  const opt2 = $('opt2').value.trim();
-  $('createError').textContent = '';
-  if (!question || !opt1 || !opt2) { $('createError').textContent = 'Please complete all fields.'; return; }
-
-  const button = $('createBtn');
-  button.disabled = true;
-  button.querySelector('.btn-label').textContent = 'Creating…';
-  try {
-    const result = await apiRequest(API, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({question, options: [opt1, opt2]})
-    });
-    adminTokens[result.poll.shareCode] = result.adminToken;
-    localStorage.setItem(ADMIN_KEY, JSON.stringify(adminTokens));
-    event.target.reset();
-    showToast('Poll created — your private creator key is saved on this device');
-    await loadPolls({silent: true});
-    setTimeout(() => copyLink(`${location.origin}/p/${result.poll.shareCode}`), 250);
-  } catch (e) {
-    $('createError').textContent = e.message;
-  } finally {
-    button.disabled = false;
-    button.querySelector('.btn-label').textContent = 'Create poll';
-  }
-});
-
-$('refreshBtn').addEventListener('click', () => loadPolls());
-
-if (sharedCode) {
-  $('createSection').hidden = true;
-  $('homeLink').setAttribute('href', '/');
-} else {
-  $('homeLink').setAttribute('href', '#');
-}
-
-loadPolls();
-setInterval(() => loadPolls({silent: true}), 5000);
+const API='/api/polls';
+const VOTER_KEY='voteflow.voterId', NAME_KEY='voteflow.voterName', CREATOR_AUTH='voteflow.creatorAuth', ADMIN_AUTH='voteflow.adminAuth';
+let voterName=localStorage.getItem(NAME_KEY)||'', voterId=localStorage.getItem(VOTER_KEY), mode='public', loginKind='admin', toastTimer;
+let creatorAuth=JSON.parse(sessionStorage.getItem(CREATOR_AUTH)||'null'), adminToken=sessionStorage.getItem(ADMIN_AUTH)||null;
+if(!voterId){voterId=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;localStorage.setItem(VOTER_KEY,voterId)}
+const $=id=>document.getElementById(id); const sharedCode=location.pathname.match(/^\/p\/([A-Za-z0-9]+)\/?$/)?.[1]||null;
+function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function showToast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2800)}
+async function apiRequest(url,options={}){const r=await fetch(url,{...options,cache:'no-store'});const type=r.headers.get('content-type')||'';const d=type.includes('application/json')?await r.json().catch(()=>null):null;if(!r.ok)throw new Error(d?.message||d?.error||`Request failed (${r.status})`);return d}
+function totalVotes(p){return p.options.reduce((s,o)=>s+Number(o.voteCount||0),0)}
+function renderOptions(poll,management=false){const total=totalVotes(poll);return poll.options.map(o=>{const votes=Number(o.voteCount||0),pct=total?Math.round(votes/total*100):0;const names=Array.isArray(o.voterNames)?o.voterNames:[], opinions=Array.isArray(o.customOpinions)?o.customOpinions:[];const list=names.length?names.map(n=>`<li>${escapeHtml(n)}</li>`).join(''):'<li>No voters yet</li>';const opinionList=opinions.length?`<strong>Other opinions</strong><ul>${opinions.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`:'';const voteButton=poll.open&&!management?`<button class="vote-btn" data-action="vote" data-poll="${poll.id}" data-option="${o.id}">Vote for this</button>`:'';const otherInput=o.other&&!management&&poll.open?`<input class="other-input" data-other-input="${poll.id}" maxlength="200" placeholder="Write your own opinion or option…">`:'';return `<div class="option-row"><div class="option-line"><span>${escapeHtml(o.text)}</span><span class="option-count voter-details" tabindex="0">${votes} · ${pct}%<span class="voter-tooltip"><strong>Voters</strong><ul>${list}</ul>${opinionList}</span></span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>${otherInput}${voteButton}</div>`}).join('')}
+function renderPoll(poll,management=false){const total=totalVotes(poll),url=`${location.origin}/p/${encodeURIComponent(poll.shareCode)}`;return `<article class="poll" data-poll-id="${poll.id}"><div class="poll-header"><div><div class="poll-status ${poll.open?'open':'closed'}"><span></span>${poll.open?'LIVE NOW':'CLOSED'}</div><h3>${escapeHtml(poll.question)}</h3><p class="poll-meta">${total} ${total===1?'vote':'votes'} · Share code ${escapeHtml(poll.shareCode)}</p></div>${!management?`<button class="copy-btn" data-action="copy" data-url="${escapeHtml(url)}">Copy link</button>`:''}</div>${!management&&poll.open?`<div class="voter-field"><label>Your name</label><input class="voter-input" data-voter="${poll.id}" maxlength="80" autocomplete="name" placeholder="Enter your name to vote" value="${escapeHtml(voterName)}"></div>`:''}<div class="options">${renderOptions(poll,management)}</div><div class="poll-footer"><span class="total-votes">${management?'Management view · Other is available to voters':poll.open?'Results update automatically · Hover a result to see voters':'Results locked · Hover a result to see voters'}</span>${management?`<span class="manage-actions"><button class="edit-btn" data-action="edit" data-poll="${poll.id}">Edit</button><button class="delete-btn" data-action="delete" data-poll="${poll.id}">Delete</button></span>`:''}</div><div class="error" id="error-${poll.id}"></div></article>`}
+async function loadPublic(){try{const polls=sharedCode?[await apiRequest(`${API}/public/${encodeURIComponent(sharedCode)}`)]:await apiRequest(API);$('polls').innerHTML=polls.map(p=>renderPoll(p)).join('');$('emptyState').hidden=polls.length>0;$('status').textContent=sharedCode?'Live poll · updates automatically':`${polls.length} ${polls.length===1?'poll':'polls'} · live updates`;if(sharedCode){$('createSection').hidden=true;$('heroSection').hidden=true;$('pollHeading').textContent='Vote now';$('pollEyebrow').textContent='SHARED POLL'}}catch(e){$('status').textContent=e.message}}
+async function vote(pollId,optionId){const input=document.querySelector(`[data-voter="${pollId}"]`),error=$(`error-${pollId}`),name=input?.value.trim();if(!name){if(input)input.focus();error.textContent='Enter your name before voting.';return}const other=document.querySelector(`[data-other-input="${pollId}"]`),customText=optionId===-1?other?.value.trim():null;if(optionId===-1&&!customText){error.textContent='Write your own opinion for Other.';other?.focus();return}try{await apiRequest(`${API}/${pollId}/vote`,{method:'POST',headers:{'Content-Type':'application/json','X-Voter-Id':voterId},body:JSON.stringify({voterName:name,optionId,customText})});voterName=name;localStorage.setItem(NAME_KEY,name);showToast('Vote recorded successfully');await loadPublic()}catch(e){error.textContent=e.message}}
+async function createPoll(e){e.preventDefault();const question=$('question').value.trim(),options=[$('opt1').value.trim(),$('opt2').value.trim()];if(!question||options.some(x=>!x)){ $('createError').textContent='Please complete all fields.';return}try{const r=await apiRequest(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,options})});$('createForm').reset();showCredentials(r);showToast('Poll created');await loadPublic()}catch(e){$('createError').textContent=e.message}}
+function showCredentials(r){$('credentialsCard').hidden=false;$('credentialsCard').innerHTML=`<strong>Save these creator credentials</strong><p>Username: <b>${escapeHtml(r.creatorUsername)}</b></p><p>Password: <b>${escapeHtml(r.creatorPassword)}</b></p><p>Use Creator login to manage only this poll.</p>`}
+function openLogin(kind){loginKind=kind;$('loginModal').hidden=false;$('loginTitle').textContent=kind==='admin'?'Admin login':'Creator login';$('loginCopy').textContent=kind==='admin'?'Main admin can manage every poll.':'Use the username and password shown when you created your poll.';$('loginUsername').value='';$('loginPassword').value='';$('loginError').textContent='';$('loginUsername').focus()}
+function closeLogin(){$('loginModal').hidden=true}
+async function submitLogin(e){e.preventDefault();const username=$('loginUsername').value.trim(),password=$('loginPassword').value;try{const r=await apiRequest(`/api/auth/${loginKind}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});if(loginKind==='admin'){adminToken=r.token;sessionStorage.setItem(ADMIN_AUTH,adminToken);mode='admin'}else{creatorAuth={username,token:r.token};sessionStorage.setItem(CREATOR_AUTH,JSON.stringify(creatorAuth));mode='creator'}closeLogin();await loadDashboard()}catch(err){$('loginError').textContent=err.message}}
+async function loadDashboard(){if(mode==='admin'){ $('dashboardTitle').textContent='All polls';$('dashboardEyebrow').textContent='MAIN ADMIN';$('credentialsCard').hidden=true;try{const polls=await apiRequest('/api/auth/admin/polls',{headers:{'X-Admin-Token':adminToken}});$('dashboardPolls').innerHTML=polls.map(p=>renderPoll(p,true)).join('');$('dashboardSection').hidden=false;$('pollSection').hidden=true;$('createSection').hidden=true;$('heroSection').hidden=true}catch(e){sessionStorage.removeItem(ADMIN_AUTH);adminToken=null;openLogin('admin')}}else if(mode==='creator'){ $('dashboardTitle').textContent='My poll';$('dashboardEyebrow').textContent='POLL CREATOR';$('credentialsCard').hidden=true;try{const p=await apiRequest('/api/auth/creator/poll',{headers:{'X-Creator-Username':creatorAuth.username,'X-Creator-Token':creatorAuth.token}});$('dashboardPolls').innerHTML=renderPoll(p,true);$('dashboardSection').hidden=false;$('pollSection').hidden=true;$('createSection').hidden=true;$('heroSection').hidden=true}catch(e){sessionStorage.removeItem(CREATOR_AUTH);creatorAuth=null;openLogin('creator')}}}
+async function editPoll(id){const card=document.querySelector(`[data-poll-id="${id}"]`);const poll=mode==='admin'?await apiRequest('/api/polls/'+id,{headers:{'X-Admin-Token':adminToken}}):await apiRequest('/api/auth/creator/poll',{headers:{'X-Creator-Username':creatorAuth.username,'X-Creator-Token':creatorAuth.token}});const original=poll.options.filter(o=>!o.other).map(o=>o.text);const question=prompt('Edit question:',poll.question);if(question===null)return;const raw=prompt('Edit options, one per line:',original.join('\n'));if(raw===null)return;const options=raw.split('\n').map(x=>x.trim()).filter(Boolean);const headers={'Content-Type':'application/json'};if(mode==='admin')headers['X-Admin-Token']=adminToken;else{headers['X-Creator-Username']=creatorAuth.username;headers['X-Creator-Token']=creatorAuth.token}try{await apiRequest('/api/polls/'+id,{method:'PUT',headers,body:JSON.stringify({question,options})});showToast('Poll updated');await loadDashboard()}catch(e){showToast(e.message)}}
+async function deletePoll(id){if(mode!=='admin'||!confirm('Delete this poll permanently?'))return;try{await apiRequest('/api/polls/'+id,{method:'DELETE',headers:{'X-Admin-Token':adminToken}});showToast('Poll deleted');await loadDashboard()}catch(e){showToast(e.message)}}
+$('createForm').addEventListener('submit',createPoll);$('adminLoginBtn').addEventListener('click',()=>openLogin('admin'));$('creatorLoginBtn').addEventListener('click',()=>openLogin('creator'));$('modalClose').addEventListener('click',closeLogin);$('loginForm').addEventListener('submit',submitLogin);$('refreshBtn').addEventListener('click',loadPublic);$('dashboardLogout').addEventListener('click',()=>{mode='public';adminToken=null;creatorAuth=null;sessionStorage.removeItem(ADMIN_AUTH);sessionStorage.removeItem(CREATOR_AUTH);$('dashboardSection').hidden=true;$('pollSection').hidden=false;$('createSection').hidden=!sharedCode;$('heroSection').hidden=Boolean(sharedCode);loadPublic()});
+$('polls').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;if(b.dataset.action==='vote')vote(Number(b.dataset.poll),Number(b.dataset.option));if(b.dataset.action==='copy')navigator.clipboard?.writeText(b.dataset.url).then(()=>showToast('Poll link copied')).catch(()=>prompt('Copy this poll link:',b.dataset.url));});
+$('dashboardPolls').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const id=Number(b.dataset.poll);if(b.dataset.action==='edit')editPoll(id);if(b.dataset.action==='delete')deletePoll(id)});
+$('polls').addEventListener('input',e=>{if(e.target.classList.contains('voter-input')){voterName=e.target.value;localStorage.setItem(NAME_KEY,voterName)}});
+if(sharedCode){$('createSection').hidden=true;$('heroSection').hidden=true}if(adminToken){mode='admin';loadDashboard()}else if(creatorAuth){mode='creator';loadDashboard()}else loadPublic();setInterval(()=>{if(mode==='public')loadPublic()},5000);

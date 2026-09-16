@@ -1,16 +1,14 @@
 package com.example.voting.model;
 
-import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
+import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 public class PollOption {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String text;
@@ -25,6 +23,14 @@ public class PollOption {
     @JsonProperty("voterNames")
     private List<String> voterNames = new ArrayList<>();
 
+    @Transient
+    @JsonProperty("customOpinions")
+    private List<String> customOpinions = new ArrayList<>();
+
+    @Transient
+    @JsonProperty("other")
+    private boolean other;
+
     public PollOption() {}
     public PollOption(String text) { this.text = text; }
 
@@ -38,4 +44,8 @@ public class PollOption {
     public void setPoll(Poll poll) { this.poll = poll; }
     public List<String> getVoterNames() { return voterNames; }
     public void setVoterNames(List<String> voterNames) { this.voterNames = voterNames == null ? new ArrayList<>() : voterNames; }
+    public List<String> getCustomOpinions() { return customOpinions; }
+    public void setCustomOpinions(List<String> customOpinions) { this.customOpinions = customOpinions == null ? new ArrayList<>() : customOpinions; }
+    public boolean isOther() { return other; }
+    public void setOther(boolean other) { this.other = other; }
 }

@@ -9,8 +9,7 @@ import java.util.List;
 @Entity
 @Table(name = "polls")
 public class Poll {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, length = 200)
@@ -26,8 +25,15 @@ public class Poll {
     @Column(nullable = false, length = 64)
     private String adminTokenHash;
 
-    @Column
-    private Instant expiresAt;
+    @JsonIgnore
+    @Column(length = 80)
+    private String creatorUsername;
+
+    @JsonIgnore
+    @Column(length = 64)
+    private String creatorPasswordHash;
+
+    @Column private Instant expiresAt;
 
     @OneToMany(mappedBy = "poll", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PollOption> options = new ArrayList<>();
@@ -44,6 +50,10 @@ public class Poll {
     public void setShareCode(String shareCode) { this.shareCode = shareCode; }
     public String getAdminTokenHash() { return adminTokenHash; }
     public void setAdminTokenHash(String adminTokenHash) { this.adminTokenHash = adminTokenHash; }
+    public String getCreatorUsername() { return creatorUsername; }
+    public void setCreatorUsername(String creatorUsername) { this.creatorUsername = creatorUsername; }
+    public String getCreatorPasswordHash() { return creatorPasswordHash; }
+    public void setCreatorPasswordHash(String creatorPasswordHash) { this.creatorPasswordHash = creatorPasswordHash; }
     public Instant getExpiresAt() { return expiresAt; }
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public List<PollOption> getOptions() { return options; }
