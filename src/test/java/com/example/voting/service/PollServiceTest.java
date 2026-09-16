@@ -321,12 +321,15 @@ class PollServiceTest {
     }
 
     @Test void closePollWithCreatorTokenSucceeds() {
-        PollService.PollCreation creation = createStoredPoll();
-        Poll poll = creation.poll();
-        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        Poll result = service.closePoll(1L, service.loginCreatorTokenForTest(creation));
-        assertFalse(result.isOpen());
-    }
+    PollService.PollCreation creation = createStoredPoll();
+    Poll poll = creation.poll();
+    when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
+    when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(poll));
+
+    String creatorToken = service.loginCreator(creation.creatorUsername(), creation.creatorPassword()).token();
+    Poll result = service.closePoll(1L, creatorToken);
+    assertFalse(result.isOpen());
+}
 
     @Test void closePollWithInvalidTokenThrows() {
         Poll poll = buildPollWithTwoOptions();
@@ -335,20 +338,20 @@ class PollServiceTest {
     }
 
     private PollService.PollCreation createStoredPoll() {
-        when(pollRepository.findByShareCode(anyString())).thenReturn(Optional.empty());
-        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> {
-            Poll poll = invocation.getArgument(0);
-            if (poll.getId() == null) {
-                poll.setId(1L);
-            }
-            return poll;
-        });
-        return service.createPollWithAdminToken("Q?", List.of("A", "B"));
-    }
+    when(pollRepository.findByShareCode(anyString())).thenReturn(Optional.empty());
+    when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> {
+        Poll poll = invocation.getArgument(0);
+        if (poll.getId() == null) {
+            ReflectionTestUtils.setField(poll, "id", 1L);
+        }
+        return poll;
+    });
+    return service.createPollWithAdminToken("Q?", List.of("A", "B"));
+}
 
     private Poll buildPollWithTwoOptions() {
         Poll poll = new Poll("Q?");
-        poll.setId(1L);
+        ReflectionTestUtils.setField(poll, "id", 1L);
         PollOption first = new PollOption("A");
         first.setId(1L);
         first.setPoll(poll);
