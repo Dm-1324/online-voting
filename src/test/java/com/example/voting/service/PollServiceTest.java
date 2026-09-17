@@ -46,7 +46,8 @@ class PollServiceTest {
     }
 
     @Test void createPollWithBlankQuestionThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("", List.of("A", "B")));
+        List<String> options = List.of("A", "B");
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("", options));
     }
 
     @Test void createPollWithTooFewOptionsThrows() {
