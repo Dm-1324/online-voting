@@ -91,6 +91,11 @@ public class PollService {
         poll.getOptions().add(other);
     }
 
+    private void attachVoterNames(Poll poll) {
+        poll.getOptions().removeIf(PollOption::isOther);
+        poll.getOptions().forEach(option -> attachVoters(poll, option));
+    }
+
     private void attachVoters(Poll poll, PollOption option) {
         List<Vote> votes = voteRepository
                 .findByPollIdAndOptionIdOrderByIdAsc(poll.getId(), option.getId());
@@ -149,7 +154,6 @@ public class PollService {
         return new AuthResult(mainAdminTokenValue(), null);
     }
 
-    @Transactional
     public AuthResult loginCreator(String username, String password) {
         Poll poll = pollRepository.findByCreatorUsername(username)
                 .orElseThrow(() -> unauthorized("Invalid creator username or password"));
@@ -165,7 +169,6 @@ public class PollService {
         return getAll();
     }
 
-    @Transactional
     public Poll getCreatorPoll(String username, String token) {
         Poll poll = pollRepository.findByCreatorUsername(username)
                 .orElseThrow(() -> unauthorized("Creator account not found"));
@@ -181,13 +184,14 @@ public class PollService {
         validatePoll(question, options);
         validateOptionCountAfterVotes(poll, options);
         replaceOriginalOptions(poll, question, options);
-        poll.getOptions().removeIf(PollOption::isOther);
         return pollRepository.save(poll);
     }
 
     private Poll loadPollForManagement(Long id, String adminToken,
                                        String creatorUsername, String creatorToken) {
-        Poll poll = getById(id);
+        Poll poll = pollRepository.findWithOptionsById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+        attachVoterNames(poll);
         if (!isMainAdminToken(adminToken)) {
             requireCreator(poll, creatorUsername, creatorToken);
         }
@@ -255,7 +259,7 @@ public class PollService {
     }
 
     private Poll voteInternal(Long id, String name, String voterId, Long option, String customText) {
-        Poll poll = getById(id);
+        Poll poll = loadPollForVoting(id);
         assertPollIsVotable(poll);
         assertVoterIsValid(name, voterId);
         assertOptionProvided(option);
@@ -263,6 +267,13 @@ public class PollService {
 
         String finalCustomText = resolveVoteChoice(poll, option, customText);
         saveVote(id, voterId, name.trim(), option, finalCustomText);
+        return poll;
+    }
+
+    private Poll loadPollForVoting(Long id) {
+        Poll poll = pollRepository.findWithOptionsById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+        attachVoterNames(poll);
         return poll;
     }
 
@@ -336,7 +347,7 @@ public class PollService {
 
     @Transactional
     public Poll closePoll(Long id, String token) {
-        Poll poll = getById(id);
+        Poll poll = loadPollForManagementClose(id);
         if (!isAuthorizedManager(poll, token)) {
             throw unauthorized("Only an authorized manager can close this poll");
         }
@@ -346,9 +357,14 @@ public class PollService {
 
     @Transactional
     public Poll closePoll(Long id) {
-        Poll poll = getById(id);
+        Poll poll = loadPollForManagementClose(id);
         poll.setOpen(false);
         return pollRepository.save(poll);
+    }
+
+    private Poll loadPollForManagementClose(Long id) {
+        return pollRepository.findWithOptionsById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
     }
 
     private boolean isAuthorizedManager(Poll poll, String token) {
