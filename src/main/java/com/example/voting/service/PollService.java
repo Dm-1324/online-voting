@@ -27,6 +27,7 @@ import java.util.UUID;
 @Service
 public class PollService {
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final String POLL_NOT_FOUND_PREFIX = "Poll not found: ";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final long OTHER_OPTION_ID = -1L;
 
@@ -56,7 +57,7 @@ public class PollService {
 
     public Poll getById(Long id) {
         Poll poll = pollRepository.findWithOptionsById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException(POLL_NOT_FOUND_PREFIX + id));
         attachVoterNamesAndOther(poll);
         return poll;
     }
@@ -190,7 +191,7 @@ public class PollService {
     private Poll loadPollForManagement(Long id, String adminToken,
                                        String creatorUsername, String creatorToken) {
         Poll poll = pollRepository.findWithOptionsById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException(POLL_NOT_FOUND_PREFIX + id));
         attachVoterNames(poll);
         if (!isMainAdminToken(adminToken)) {
             requireCreator(poll, creatorUsername, creatorToken);
@@ -237,7 +238,7 @@ public class PollService {
     public void deletePoll(Long id, String token) {
         requireMainAdmin(token);
         if (!pollRepository.existsById(id)) {
-            throw new IllegalArgumentException("Poll not found: " + id);
+            throw new IllegalArgumentException(POLL_NOT_FOUND_PREFIX + id);
         }
         pollRepository.deleteById(id);
     }
@@ -272,7 +273,7 @@ public class PollService {
 
     private Poll loadPollForVoting(Long id) {
         Poll poll = pollRepository.findWithOptionsById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException(POLL_NOT_FOUND_PREFIX + id));
         attachVoterNames(poll);
         return poll;
     }
@@ -364,7 +365,7 @@ public class PollService {
 
     private Poll loadPollForManagementClose(Long id) {
         return pollRepository.findWithOptionsById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Poll not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException(POLL_NOT_FOUND_PREFIX + id));
     }
 
     private boolean isAuthorizedManager(Poll poll, String token) {
