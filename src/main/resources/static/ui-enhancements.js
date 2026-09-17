@@ -111,12 +111,35 @@
     }
   }
 
+  function distributePolls(container) {
+    const directPolls = [...container.children].filter(child => child.classList.contains('poll'));
+    if (!directPolls.length) {
+      return;
+    }
+
+    const columns = document.createElement('div');
+    columns.className = 'poll-masonry-columns';
+    const left = document.createElement('div');
+    const right = document.createElement('div');
+    left.className = 'poll-column';
+    right.className = 'poll-column';
+    columns.append(left, right);
+    container.appendChild(columns);
+
+    directPolls.forEach(poll => {
+      const target = left.offsetHeight <= right.offsetHeight ? left : right;
+      target.appendChild(poll);
+    });
+  }
+
   function enhanceAll() {
     pollContainers.forEach(id => {
       const container = document.getElementById(id);
       if (!container) {
         return;
       }
+
+      distributePolls(container);
       container.querySelectorAll('.poll').forEach(enhancePoll);
     });
   }
