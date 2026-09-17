@@ -1,7 +1,27 @@
 /* VoteFlow UI refinements */
+.poll-grid {
+  display: block;
+}
+
+.poll-masonry-columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.poll-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .poll {
   padding: 26px;
   border-radius: 20px;
+  align-self: flex-start;
+  height: fit-content;
   transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
 }
 
@@ -92,8 +112,17 @@
 }
 
 @media (max-width: 650px) {
+  .poll-masonry-columns {
+    display: block;
+  }
+
+  .poll-column {
+    display: contents;
+  }
+
   .poll {
     padding: 20px;
+    margin-bottom: 18px;
   }
 
   .poll-header-actions {
