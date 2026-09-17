@@ -50,23 +50,28 @@ class PollServiceTest {
     }
 
     @Test void createPollWithTooFewOptionsThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", List.of("A")));
+        List<String> options = List.of("A");
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", options));
     }
 
     @Test void createPollWithTooManyOptionsThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", List.of("1","2","3","4","5","6","7","8","9","10","11")));
+        List<String> options = List.of("1","2","3","4","5","6","7","8","9","10","11");
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", options));
     }
 
     @Test void createPollWithLongQuestionThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("x".repeat(201), List.of("A", "B")));
+        String longQuestion = "x".repeat(201);
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll(longQuestion, List.of("A", "B")));
     }
 
     @Test void createPollWithLongOptionThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", List.of("A", "x".repeat(101))));
+        List<String> options = List.of("A", "x".repeat(101));
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", options));
     }
 
     @Test void createPollWithNullOptionThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", Arrays.asList("A", null)));
+        List<String> options = Arrays.asList("A", null);
+        assertThrows(IllegalArgumentException.class, () -> service.createPoll("Q?", options));
     }
 
     @Test void createPollSavesSuccessfully() {
@@ -145,7 +150,8 @@ class PollServiceTest {
     @Test void voteRejectsLongVoterId() {
         Poll poll = buildPollWithTwoOptions();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        assertThrows(IllegalArgumentException.class, () -> service.vote(1L, "Dhruv", "x".repeat(65), 1L));
+        String longVoterId = "x".repeat(65);
+        assertThrows(IllegalArgumentException.class, () -> service.vote(1L, "Dhruv", longVoterId, 1L));
     }
 
     @Test void voteRejectsMissingOption() {
@@ -204,7 +210,8 @@ class PollServiceTest {
         Poll poll = buildPollWithTwoOptions();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.findByPollIdAndVoterId(1L, "device-1")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> service.vote(1L, "Dhruv", "device-1", -1L, "x".repeat(201)));
+        String longText = "x".repeat(201);
+        assertThrows(IllegalArgumentException.class, () -> service.vote(1L, "Dhruv", "device-1", -1L, longText));
     }
 
     @Test void legacyVoteOverloadUsesDerivedVoterId() {
@@ -242,7 +249,8 @@ class PollServiceTest {
     @Test void loginCreatorWithWrongPasswordThrowsUnauthorized() {
         PollService.PollCreation creation = createStoredPoll();
         when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(creation.poll()));
-        assertThrows(ResponseStatusException.class, () -> service.loginCreator(creation.creatorUsername(), "wrong"));
+        String username = creation.creatorUsername();
+        assertThrows(ResponseStatusException.class, () -> service.loginCreator(username, "wrong"));
     }
 
     @Test void getAdminPollsWithValidTokenReturnsAllPolls() {
@@ -265,7 +273,8 @@ class PollServiceTest {
     @Test void getCreatorPollWithWrongTokenThrowsUnauthorized() {
         PollService.PollCreation creation = createStoredPoll();
         when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(creation.poll()));
-        assertThrows(ResponseStatusException.class, () -> service.getCreatorPoll(creation.creatorUsername(), "forged"));
+        String username = creation.creatorUsername();
+        assertThrows(ResponseStatusException.class, () -> service.getCreatorPoll(username, "forged"));
     }
 
     @Test void updatePollAsMainAdminSucceeds() {
@@ -294,13 +303,15 @@ class PollServiceTest {
         String token = service.loginAdmin(ADMIN_USER, ADMIN_PASS).token();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
         when(voteRepository.countByPollId(1L)).thenReturn(5L);
-        assertThrows(IllegalArgumentException.class, () -> service.updatePoll(1L, "Updated?", List.of("X", "Y", "Z"), token, null, null));
+        List<String> newOptions = List.of("X", "Y", "Z");
+        assertThrows(IllegalArgumentException.class, () -> service.updatePoll(1L, "Updated?", newOptions, token, null, null));
     }
 
     @Test void updatePollWithWrongCreatorTokenThrowsUnauthorized() {
         Poll poll = buildPollWithTwoOptions();
         when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-        assertThrows(ResponseStatusException.class, () -> service.updatePoll(1L, "Updated?", List.of("X", "Y"), null, "someone", "wrong"));
+        List<String> newOptions = List.of("X", "Y");
+        assertThrows(ResponseStatusException.class, () -> service.updatePoll(1L, "Updated?", newOptions, null, "someone", "wrong"));
     }
 
     @Test void deletePollAsAdminDeletesIt() {
@@ -321,15 +332,15 @@ class PollServiceTest {
     }
 
     @Test void closePollWithCreatorTokenSucceeds() {
-    PollService.PollCreation creation = createStoredPoll();
-    Poll poll = creation.poll();
-    when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
-    when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(poll));
+        PollService.PollCreation creation = createStoredPoll();
+        Poll poll = creation.poll();
+        when(pollRepository.findWithOptionsById(1L)).thenReturn(Optional.of(poll));
+        when(pollRepository.findByCreatorUsername(creation.creatorUsername())).thenReturn(Optional.of(poll));
 
-    String creatorToken = service.loginCreator(creation.creatorUsername(), creation.creatorPassword()).token();
-    Poll result = service.closePoll(1L, creatorToken);
-    assertFalse(result.isOpen());
-}
+        String creatorToken = service.loginCreator(creation.creatorUsername(), creation.creatorPassword()).token();
+        Poll result = service.closePoll(1L, creatorToken);
+        assertFalse(result.isOpen());
+    }
 
     @Test void closePollWithInvalidTokenThrows() {
         Poll poll = buildPollWithTwoOptions();
@@ -338,16 +349,16 @@ class PollServiceTest {
     }
 
     private PollService.PollCreation createStoredPoll() {
-    when(pollRepository.findByShareCode(anyString())).thenReturn(Optional.empty());
-    when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> {
-        Poll poll = invocation.getArgument(0);
-        if (poll.getId() == null) {
-            ReflectionTestUtils.setField(poll, "id", 1L);
-        }
-        return poll;
-    });
-    return service.createPollWithAdminToken("Q?", List.of("A", "B"));
-}
+        when(pollRepository.findByShareCode(anyString())).thenReturn(Optional.empty());
+        when(pollRepository.save(any(Poll.class))).thenAnswer(invocation -> {
+            Poll poll = invocation.getArgument(0);
+            if (poll.getId() == null) {
+                ReflectionTestUtils.setField(poll, "id", 1L);
+            }
+            return poll;
+        });
+        return service.createPollWithAdminToken("Q?", List.of("A", "B"));
+    }
 
     private Poll buildPollWithTwoOptions() {
         Poll poll = new Poll("Q?");

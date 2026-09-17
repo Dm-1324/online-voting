@@ -1,7 +1,6 @@
 package com.example.voting.controller;
 
 import com.example.voting.model.Poll;
-import com.example.voting.model.PollOption;
 import com.example.voting.service.PollService;
 import org.junit.jupiter.api.Test;
 
@@ -9,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class PollControllerTest {
@@ -59,8 +57,8 @@ class PollControllerTest {
     void createAcceptsMissingQuestion() {
         when(service.createPollWithAdminToken(null, List.of("A", "B")))
                 .thenThrow(new IllegalArgumentException("Question is required"));
-        assertThrows(IllegalArgumentException.class,
-                () -> controller.create(Map.of("options", List.of("A", "B"))));
+        Map<String, Object> body = Map.of("options", List.of("A", "B"));
+        assertThrows(IllegalArgumentException.class, () -> controller.create(body));
     }
 
     @Test
@@ -78,15 +76,16 @@ class PollControllerTest {
 
     @Test
     void voteRejectsMissingOption() {
+        Map<String, Object> body = Map.of("voterName", "Dhruv");
         assertThrows(IllegalArgumentException.class,
-                () -> controller.vote(1L, "device-1", Map.of("voterName", "Dhruv")));
+                () -> controller.vote(1L, "device-1", body));
     }
 
     @Test
     void voteRejectsInvalidOption() {
+        Map<String, Object> body = Map.of("voterName", "Dhruv", "optionId", "abc");
         assertThrows(IllegalArgumentException.class,
-                () -> controller.vote(1L, "device-1",
-                        Map.of("voterName", "Dhruv", "optionId", "abc")));
+                () -> controller.vote(1L, "device-1", body));
     }
 
     @Test
