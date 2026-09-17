@@ -60,9 +60,10 @@ class PollServiceTest {
     }
 
     @Test void createPollWithLongQuestionThrows() {
-        String longQuestion = "x".repeat(201);
-        assertThrows(IllegalArgumentException.class, () -> service.createPoll(longQuestion, List.of("A", "B")));
-    }
+    String longQuestion = "x".repeat(201);
+    List<String> options = List.of("A", "B");
+    assertThrows(IllegalArgumentException.class, () -> service.createPoll(longQuestion, options));
+}
 
     @Test void createPollWithLongOptionThrows() {
         List<String> options = List.of("A", "x".repeat(101));
