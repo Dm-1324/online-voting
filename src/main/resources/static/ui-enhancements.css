@@ -1,0 +1,107 @@
+/* VoteFlow UI refinements */
+.poll {
+  padding: 26px;
+  border-radius: 20px;
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+}
+
+.poll:hover {
+  border-color: #d6dded;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .11);
+}
+
+.poll h3 {
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.poll-meta,
+.total-votes {
+  font-size: 12px;
+}
+
+.poll-status {
+  font-size: 10px;
+}
+
+.voter-field label,
+.option-line {
+  font-size: 14px;
+}
+
+.voter-input,
+.other-input {
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.option-count {
+  font-size: 12px;
+}
+
+.bar-bg {
+  height: 10px;
+}
+
+.action-btn,
+.vote-btn {
+  padding: 9px 13px;
+  font-size: 12px;
+}
+
+.poll-header {
+  align-items: flex-start;
+}
+
+.poll-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.expand-btn {
+  color: #475569;
+  background: #f8fafc;
+}
+
+.expand-btn:hover {
+  border-color: #a5b4fc;
+  color: var(--primary);
+  background: #eef2ff;
+  transform: translateY(-1px);
+}
+
+.poll-content {
+  display: block;
+}
+
+.poll-content[hidden] {
+  display: none !important;
+}
+
+.poll.is-collapsed {
+  box-shadow: 0 12px 35px rgba(15, 23, 42, .07);
+}
+
+.poll.is-collapsed .poll-header {
+  min-height: 58px;
+  align-items: center;
+}
+
+@media (max-width: 650px) {
+  .poll {
+    padding: 20px;
+  }
+
+  .poll-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .poll-header-actions .action-btn {
+    flex: 0 0 auto;
+  }
+}
