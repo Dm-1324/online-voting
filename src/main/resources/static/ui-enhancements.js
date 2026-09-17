@@ -2,24 +2,48 @@
   const collapsedPolls = new Set();
   const pollContainers = ['polls', 'dashboardPolls'];
 
+  function installCollapseStyles() {
+    if (document.getElementById('ui-enhancement-styles')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'ui-enhancement-styles';
+    style.textContent = `
+      .poll.is-collapsed > :not(.poll-header) {
+        display: none !important;
+      }
+      .poll.is-collapsed {
+        padding-bottom: 18px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   async function copyText(text) {
+    if (!text) {
+      return false;
+    }
+
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
         return true;
       }
     } catch (error) {
-      // Fall through to the legacy copy method.
+      // Use the HTTP-compatible fallback below.
     }
 
     const textarea = document.createElement('textarea');
     textarea.value = text;
     textarea.setAttribute('readonly', '');
     textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
     document.body.appendChild(textarea);
+    textarea.focus();
     textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
+
     let copied = false;
     try {
       copied = document.execCommand('copy');
@@ -32,15 +56,15 @@
 
   function setCollapsed(poll, collapsed) {
     const pollId = poll.dataset.pollId;
-    const content = poll.querySelector('.poll-content');
     const button = poll.querySelector('[data-enhance="expand"]');
-    if (!content || !button) {
+    if (!button) {
       return;
     }
-    content.hidden = collapsed;
+
     poll.classList.toggle('is-collapsed', collapsed);
     button.textContent = collapsed ? 'Expand' : 'Collapse';
     button.setAttribute('aria-expanded', String(!collapsed));
+
     if (collapsed) {
       collapsedPolls.add(pollId);
     } else {
@@ -50,8 +74,7 @@
 
   function enhancePoll(poll) {
     if (poll.querySelector('[data-enhance="expand"]')) {
-      const existingContent = poll.querySelector('.poll-content');
-      if (existingContent && collapsedPolls.has(poll.dataset.pollId)) {
+      if (collapsedPolls.has(poll.dataset.pollId)) {
         setCollapsed(poll, true);
       }
       return;
@@ -62,17 +85,16 @@
       return;
     }
 
-    const content = document.createElement('div');
-    content.className = 'poll-content';
-    const movable = [...poll.children].filter(child => child !== header);
-    movable.forEach(child => content.appendChild(child));
-    poll.appendChild(content);
+    let actions = header.querySelector('.poll-header-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'poll-header-actions';
+      header.appendChild(actions);
+    }
 
-    const actions = document.createElement('div');
-    actions.className = 'poll-header-actions';
     const copyButton = header.querySelector('[data-action="copy"]');
-    if (copyButton) {
-      actions.appendChild(copyButton);
+    if (copyButton && copyButton.parentElement !== actions) {
+      actions.insertBefore(copyButton, actions.firstChild);
     }
 
     const expandButton = document.createElement('button');
@@ -83,7 +105,6 @@
     expandButton.setAttribute('aria-expanded', 'true');
     expandButton.textContent = 'Collapse';
     actions.appendChild(expandButton);
-    header.appendChild(actions);
 
     if (collapsedPolls.has(poll.dataset.pollId)) {
       setCollapsed(poll, true);
@@ -105,28 +126,35 @@
     if (copyButton) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      copyText(copyButton.dataset.url || '').then(copied => {
+      const url = copyButton.dataset.url || '';
+      copyText(url).then(copied => {
         if (copied && typeof showToast === 'function') {
           showToast('Poll link copied');
-        } else if (copyButton.dataset.url) {
-          window.prompt('Copy this poll link:', copyButton.dataset.url);
+        } else if (url) {
+          window.prompt('Copy this poll link:', url);
         }
       });
       return;
     }
 
     const expandButton = event.target.closest('[data-enhance="expand"]');
-    if (expandButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      const poll = expandButton.closest('.poll');
-      if (poll) {
-        setCollapsed(poll, !poll.classList.contains('is-collapsed'));
-      }
+    if (!expandButton) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const poll = expandButton.closest('.poll');
+    if (poll) {
+      setCollapsed(poll, !poll.classList.contains('is-collapsed'));
     }
   }, true);
 
-  const observer = new MutationObserver(enhanceAll);
-  observer.observe(document.body, { childList: true, subtree: true });
+  installCollapseStyles();
   enhanceAll();
+
+  const observer = new MutationObserver(() => {
+    window.requestAnimationFrame(enhanceAll);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
